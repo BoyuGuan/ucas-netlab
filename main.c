@@ -4,7 +4,7 @@ void clienterror(int fd, char *cause, char *errnum, char *shortErroMessage, char
 void read_requesthdrs(rio_t *rp);
 void *handle_80_thread(void* arg);
 int parseURL(char* url, char* fileName);
-void serve_static(int fd, char *filename, int fileSize);
+void serve_static(int fd, char *fileName, int serverCode, char* shortErrorMessage); //多传一个是否需要加密
 void serve_video(int fd, char *filename, int fileSize);
 void get_filetype(char *filename, char *filetype);
 
@@ -83,6 +83,7 @@ void *handle_80_thread(void* vargp){
     strcpy(fileName, "");
 
     // 读取请求
+    struct stat sbuf;
     rio_t clientRio;
     rio_readinitb(&clientRio, connectFD);
     if (!rio_readlineb(&clientRio, buf, BUFFER_SZIE))  
@@ -90,9 +91,9 @@ void *handle_80_thread(void* vargp){
         return;
     sscanf(buf, "%s %s %s", method, url, httpVersion );
     printf("request is %s", buf);
-    if (strcasecmp(method, "GET")) {                     
-        // 只支持GET 方法
-        clienterror(connectFD, method, "501", "Not Implemented", "We just support GET method :( ");
+    if (strcasecmp(method, "GET")) {    // 只支持GET 方法
+        // char file_501[20] = 
+        serve_static(connectFD, "./dir/501.html", 501, "Not Implemented");
         return;
     }            
     read_requesthdrs(&clientRio);  //读取所有请求内容，只是读完而已，目前没啥用，因为我们只对第一条的get方法感兴趣。
@@ -102,17 +103,17 @@ void *handle_80_thread(void* vargp){
 
     printf("request file is %s \n", fileName);
 
-    struct stat sbuf;
-    if(stat(fileName, &sbuf) < 0){
-        clienterror(connectFD, method, "404", "Not Found", "We don't have this file :( ");
+    if(stat(fileName, &sbuf) < 0){  // 没这文件
+        serve_static(connectFD, "./dir/404.html",  404, "Not Found");
         return;
     }
     if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) { // 没有权限读的文件
-        clienterror(connectFD, fileName, "403", "Forbidden", "We couldn't read the file :( ");
+        stat("./dir/403.html", &sbuf);
+        serve_static(connectFD, "./dir/403.html",  403, "Forbidden");
         return;
     }
     if (!ifRequestVideo)
-        serve_static(connectFD, fileName, sbuf.st_size);
+        serve_static(connectFD, fileName,  200, "OK");
     else
         serve_video(connectFD, fileName, sbuf.st_size);    
     
@@ -122,18 +123,27 @@ void *handle_80_thread(void* vargp){
 }
 
 
-void serve_static(int fd, char *fileName, int fileSize) 
-{
-    int srcfd;
+void serve_static(int fd, char *fileName, int serverCode, char* shortErrorMessage) //多传一个是否需要加密
+{   
+    printf("\nasdadasd\n");
+    // printf("\n\nfilename %s   serverCode %d  meg %s\n\n", fileName, serverCode, shortErrorMessage);
+
+    struct stat sbuf;
+    stat(fileName, &sbuf);
+    int srcfd, fileSize = sbuf.st_size;
     char *srcp, filetype[MIDDLE_STRING_BUF], buf[FOUR_K_SIZE];
- 
+    // printf("serverCode: %d   shortMessage: %s  file name: %s  file size : %d \n", serverCode, shortErrorMessage, fileName ,fileSize);
     /* Send response headers to client */
     get_filetype(fileName, filetype);       
-    sprintf(buf, "HTTP/1.0 200 OK\r\n");    
+    sprintf(buf, "HTTP/1.1 %d %s\r\n", serverCode, shortErrorMessage);    
     sprintf(buf, "%sServer: Guan&Wu Web Server\r\n", buf);
     sprintf(buf, "%sConnection: close\r\n", buf);
     sprintf(buf, "%sContent-length: %d\r\n", buf, fileSize);
     sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
+
+    // 加密然后再存
+
+
     rio_writen(fd, buf, strlen(buf));       
     // printf("Response headers:\n");
     // printf("%s", buf)
@@ -174,21 +184,16 @@ void get_filetype(char *filename, char *filetype)
 }  
 
 
-
-
-
 int parseURL(char* url, char* fileName){
     strcpy(fileName, "./dir");
     strcat(fileName, url);
-    if (url[strlen(url)-1] == '/')                   //line:netp:parseuri:slashcheck
+    if (url[strlen(url)-1] == '/')     
         strcat(fileName, "index.html");
     int isVideo = 1;
     if( !( strstr(url, ".mp4") ||  strstr(url, ".avi") || strstr(url, ".mkv") || strstr(url, ".mp4") ) )
         isVideo = 0;   // 请求的不是视频内容
     return isVideo;
 }
-
-
 
 
 void read_requesthdrs(rio_t *rp) 
@@ -204,25 +209,3 @@ void read_requesthdrs(rio_t *rp)
     return;
 }
 
-
-
-void clienterror(int fd, char *cause, char *errnum, char *shortErroMessage, char *longErrorMessage) 
-{
-    char header[BUFFER_SZIE], body[BUFFER_SZIE];
-
-    /* Build the HTTP response body */
-    sprintf(body, "<html><title>Tiny Error</title>");
-    sprintf(body, "%s<body bgcolor=""ffffff"">\r\n", body);
-    sprintf(body, "%s%s: %s\r\n", body, errnum, shortErroMessage);
-    sprintf(body, "%s<p>%s: %s\r\n", body, longErrorMessage, cause);
-    sprintf(body, "%s<hr><em>The Tiny Web server</em>\r\n", body);
-
-    /* Print the HTTP response */
-    sprintf(header, "HTTP/1.1 %s %s\r\n", errnum, shortErroMessage);
-    sprintf(header, "%sServer: Guan&Wu Web Server\r\n", header);
-    sprintf(header, "%sConnection: close\r\n", header);
-    sprintf(header, "%sContent-type: text/html\r\n", header);
-    sprintf(header, "%sContent-length: %d\r\n\r\n", header, (int)strlen(body));
-    rio_writen(fd, header, strlen(header));
-    rio_writen(fd, body, strlen(body));
-}
