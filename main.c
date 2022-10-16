@@ -5,7 +5,7 @@ void read_requesthdrs(rio_t *rp);
 void *handle_80_thread(void* arg);
 int parseURL(char* url, char* fileName);
 void serve_static(int fd, char *fileName, int serverCode, char* shortErrorMessage); //多传一个是否需要加密
-void serve_video(int fd, char *filename, int fileSize);
+void serve_video(int fd, char *filename);
 void get_filetype(char *filename, char *filetype);
 
 
@@ -115,7 +115,7 @@ void *handle_80_thread(void* vargp){
     if (!ifRequestVideo)
         serve_static(connectFD, fileName,  200, "OK");
     else
-        serve_video(connectFD, fileName, sbuf.st_size);    
+        serve_video(connectFD, fileName);
     
     if(close(connectFD) < 0)
         server_error("close conncet fd error!");
@@ -125,29 +125,25 @@ void *handle_80_thread(void* vargp){
 
 void serve_static(int fd, char *fileName, int serverCode, char* shortErrorMessage) //多传一个是否需要加密
 {   
-    printf("\nasdadasd\n");
     // printf("\n\nfilename %s   serverCode %d  meg %s\n\n", fileName, serverCode, shortErrorMessage);
 
     struct stat sbuf;
     stat(fileName, &sbuf);
     int srcfd, fileSize = sbuf.st_size;
-    char *srcp, filetype[MIDDLE_STRING_BUF], buf[FOUR_K_SIZE];
+    char *srcp, fileType[MIDDLE_STRING_BUF], buf[FOUR_K_SIZE];
     // printf("serverCode: %d   shortMessage: %s  file name: %s  file size : %d \n", serverCode, shortErrorMessage, fileName ,fileSize);
     /* Send response headers to client */
-    get_filetype(fileName, filetype);       
+    get_filetype(fileName, fileType);       
     sprintf(buf, "HTTP/1.1 %d %s\r\n", serverCode, shortErrorMessage);    
     sprintf(buf, "%sServer: Guan&Wu Web Server\r\n", buf);
     sprintf(buf, "%sConnection: close\r\n", buf);
     sprintf(buf, "%sContent-length: %d\r\n", buf, fileSize);
-    sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
+    sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, fileType);
 
     // 加密然后再存
 
 
     rio_writen(fd, buf, strlen(buf));       
-    // printf("Response headers:\n");
-    // printf("%s", buf)
-    // printf("\n\nresponse headers finfish\n\n");
 
     /* Send response body to client */
     if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
@@ -163,9 +159,37 @@ void serve_static(int fd, char *fileName, int serverCode, char* shortErrorMessag
 
 
 
-void serve_video(int fd, char *filename, int fileSize) 
+void serve_video(int fd, char *fileName) 
 {   // 待写
-    sleep(1);
+
+    struct stat sbuf;
+    stat(fileName, &sbuf);
+    int srcfd, fileSize = sbuf.st_size;
+    char *srcp, fileType[MIDDLE_STRING_BUF], buf[FOUR_K_SIZE];
+
+    get_filetype(fileName, fileType);       
+    sprintf(buf, "HTTP/1.1 200 OK\r\n");    
+    sprintf(buf, "%sServer: Guan&Wu Web Server\r\n", buf);
+    sprintf(buf, "%sConnection: close\r\n", buf);
+    sprintf(buf, "%sContent-length: %d\r\n", buf, fileSize);
+    sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, fileType);
+
+    // 加密然后再存
+
+
+    rio_writen(fd, buf, strlen(buf));       
+
+    /* Send response body to client */
+    if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
+        server_error("open object file error!");
+    if ( (srcp = mmap(0, fileSize, PROT_READ, MAP_PRIVATE, srcfd, 0)) == ((void *) -1) )
+        server_error("mmap object file function error!");
+    if(close(srcfd) < 0 )
+        server_error("close object file error!");
+    rio_writen(fd, srcp, fileSize);
+    if( munmap(srcp, fileSize) < 0 )
+        server_error("unmmap object file error!");
+
 }
 
 
@@ -179,6 +203,8 @@ void get_filetype(char *filename, char *filetype)
         strcpy(filetype, "image/png");
     else if (strstr(filename, ".jpg"))
         strcpy(filetype, "image/jpeg");
+    else if (strstr(filename, ".mp4"))
+        strcpy(filetype, "video/mp4");
     else
         strcpy(filetype, "text/plain");
 }  
