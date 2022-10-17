@@ -91,7 +91,7 @@ void *handle_80_thread(void* vargp){
         // 空请求
         return;
     sscanf(buf, "%s %s %s", method, url, httpVersion );
-    // printf("request is %s", buf);
+    // printf("request is \n%s", buf);
     if (strcasecmp(method, "GET")) {    // 只支持GET 方法
         // char file_501[20] = 
         serve_static(connectFD, "./dir/501.html", 501, "Not Implemented", requestRange);
@@ -117,16 +117,16 @@ void *handle_80_thread(void* vargp){
     }
 
     int successServerCode = 200; // 请求成功的类型种类（是普通请求的话是200，分段的话是206）
-    char successServerShortMessage = "OK";
-    if(!strcmp(requestRange,"")) { // 请求是range分段请求
-        successServerCode = 206;
-        strcpy(successServerShortMessage, "Partial Content");
-    }
-    if (!ifRequestVideo)
-        serve_static(connectFD, fileName,  successServerCode, successServerShortMessage, requestRange);
-    else
-        serve_video(connectFD, fileName, successServerCode, successServerShortMessage, requestRange);
-    
+    char successServerShortMessage[SHORT_STRING_BUF] = "OK";
+    // if(!strcmp(requestRange,"")) { // 请求是range分段请求
+    //     successServerCode = 206;
+    //     strcpy(successServerShortMessage, "Partial Content");
+    // }else{
+        if (!ifRequestVideo)
+            serve_static(connectFD, fileName,  successServerCode, successServerShortMessage, requestRange);
+        else
+            serve_video(connectFD, fileName, successServerCode, successServerShortMessage, requestRange);
+    // }
     if(close(connectFD) < 0)
         server_error("close conncet fd error!");
 
@@ -146,7 +146,7 @@ void serve_static(int fd, char *fileName, int serviceCode, char* shortErrorMessa
     get_filetype(fileName, fileType);       
     sprintf(buf, "HTTP/1.1 %d %s\r\n", serviceCode, shortErrorMessage);    
     sprintf(buf, "%sServer: Guan&Wu Web Server\r\n", buf);
-    sprintf(buf, "%sConnection: close\r\n", buf);
+    sprintf(buf, "%sConnection: keep-alive\r\n", buf);
     sprintf(buf, "%sAccept-Ranges: bytes\r\n", buf);  // 支持分段请求
     sprintf(buf, "%sContent-length: %d\r\n", buf, fileSize);
     sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, fileType);
@@ -250,11 +250,13 @@ void read_requesthdrs(rio_t *rp, char* partialRange)
     char buf[ONE_K_SIZE];
 
     rio_readlineb(rp, buf, ONE_K_SIZE);
+    // printf("%s", buf);
     if ( strstr(buf, "Range"))
         strcpy(partialRange, buf);
 
     while(strcmp(buf, "\r\n")) {          // http请求以一行 \r\n结束
         rio_readlineb(rp, buf, ONE_K_SIZE);
+        // printf("%s", buf);
         if ( strstr(buf, "Range"))
             strcpy(partialRange, buf);
     }
