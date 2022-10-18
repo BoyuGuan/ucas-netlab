@@ -85,6 +85,7 @@ void *handle_80_thread(void* vargp){
 
     pthread_detach(pthread_self()); 
     int connectFD = *(int*) vargp;
+    printf("connectFD %d \n", connectFD);
     char requestRange[ONE_K_SIZE] = "";
     free(vargp);
     char buf[BUFFER_SZIE], method[SHORT_STRING_BUF], url[ONE_K_SIZE], \
@@ -163,7 +164,7 @@ void serve_no_range(int fd, char *fileName, int serviceCode, char* shortMessage)
     sprintf(buf, "%sAccept-Ranges: bytes\r\n", buf);  // 支持分段请求
     sprintf(buf, "%sContent-length: %d\r\n", buf, fileSize);
     sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, fileType);
-    printf("respond header is:\n%s", buf);
+    printf("response header is:\n%s", buf);
     rio_writen(fd, buf, strlen(buf));       
     // 加密然后再存
 
@@ -195,9 +196,7 @@ void serve_range(int fd, char*fileName,  char* range){
         begin = 0;
     if (begin >= fileSize)// 给大了，超过视频大小了
         return; // 啥也不干
-    if( end == SIZE_T_MAX ) //  没给end，初始化的时候搞大一点，第一次传就传4个M
-        end = begin + 4*CHUNK_SIZE - 1;
-    else if( (end - begin) > (CHUNK_SIZE - 1) ) // 给的end和begin相差太大，切到CHUNK_SIZE大小
+    if( (end == SIZE_T_MAX) || (end - begin) > (CHUNK_SIZE - 1) ) // 没给end或者给的end和begin相差太大，切到CHUNK_SIZE大小
             end = begin + CHUNK_SIZE - 1;
     if (end >= fileSize)
         end = fileSize - 1;
@@ -207,11 +206,11 @@ void serve_range(int fd, char*fileName,  char* range){
     sprintf(buf, "HTTP/1.1 206 Partial Content\r\n");    
     sprintf(buf, "%sServer: Guan&Wu Web Server\r\n", buf);
     sprintf(buf, "%sConnection: keep-alive\r\n", buf);
-    sprintf(buf, "%sKeep-Alive: timeout=5, max=100\r\n", buf);
+    // sprintf(buf, "%sKeep-Alive: timeout=5, max=100\r\n", buf);
     sprintf(buf, "%sContent-type: %s\r\n", buf, fileType);
 
     // printf("\n\n%d, %lu  %lu  %lu \n", fd, begin, end, contentLength);
-    sprintf(buf, "%sContent-Range: bytes %d-%d/%d\r\n", buf, begin, end, end + 1);
+    sprintf(buf, "%sContent-Range: bytes %lu-%lu/%lu\r\n", buf, begin, end, end + 1); // 注意是lu！！！
     sprintf(buf, "%sContent-length: %d\r\n\r\n", buf, contentLength);
 
     printf("%s", buf);

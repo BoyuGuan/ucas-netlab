@@ -40,7 +40,7 @@
 #define SIZE_T_MAX 0xffffffffffffffff   // 默认设为最大值，方便探查是否指定范围
 #define LONG_STRING_BUF ONE_K_SIZE
 // #define CHUNK_SIZE 1048576   // 传输块大小设置为1M，即一次传输512KB的数据
-#define CHUNK_SIZE 524288  // 传输块大小设置为1M，即一次传输512KB的数据
+#define CHUNK_SIZE 1048576  // 传输块大小设置为1M，即一次传输1M的数据
 
 #define LISTEN_QUERY_MAX_LEN 512
 #define RIO_BUFSIZE ONE_K_SIZE << 3
