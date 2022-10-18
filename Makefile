@@ -5,8 +5,5 @@ http-server: *.c
 temp: *.c
 	gcc -Wall -g temp.c utils.c utils.h -o temp -lssl -lcrypto -lpthread
 
-
-
-
 clean:
 	@rm http-server

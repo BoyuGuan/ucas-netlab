@@ -12,7 +12,7 @@ void serve_video(int fd, char *fileName, int serviceCode, char *serviceShortMess
 void get_filetype(char *filename, char *filetype);
 
 
-// TODO 实现请求的range等功能以应对视频
+// TODO 解决分块时线程抢着写的问题
 // TODO 改写支持keep-alive连接
 
 
@@ -189,34 +189,35 @@ void serve_range(int fd, char*fileName,  char* range){
     size_t contentLength, fileSize = sbuf.st_size;
     char *srcp, fileType[MIDDLE_STRING_BUF], buf[FOUR_K_SIZE];
 
-    get_filetype(fileName, fileType);       
-    sprintf(buf, "HTTP/1.1 206 Partial Content\r\n");    
-    sprintf(buf, "%sServer: Guan&Wu Web Server\r\n", buf);
-    sprintf(buf, "%sConnection: close\r\n", buf);
-    sprintf(buf, "%sContent-type: %s\r\n", buf, fileType);
     size_t begin = SIZE_T_MAX, end = SIZE_T_MAX;
     sscanf(range, "Range: bytes=%lu-%lu", &begin, &end);
     if (begin == SIZE_T_MAX)  // 没给begin，默认是0
         begin = 0;
-    if (begin >= fileSize){// 给大了，超过视频大小了
-        begin = fileSize ;
-        end = fileSize - 1;
-    }     
-    if( (end == SIZE_T_MAX) || ( (end - begin) > (CHUNK_SIZE - 1) ) ) // 没给end，或者给的end和begin比太大，传CHUNK_SIZE大小的数据
-        end = begin + CHUNK_SIZE - 1;
-
+    if (begin >= fileSize)// 给大了，超过视频大小了
+        return; // 啥也不干
+    if( end == SIZE_T_MAX ) //  没给end，初始化的时候搞大一点，第一次传就传4个M
+        end = begin + 4*CHUNK_SIZE - 1;
+    else if( (end - begin) > (CHUNK_SIZE - 1) ) // 给的end和begin相差太大，切到CHUNK_SIZE大小
+            end = begin + CHUNK_SIZE - 1;
     if (end >= fileSize)
         end = fileSize - 1;
     contentLength = end - begin + 1;
+    
+    get_filetype(fileName, fileType);       
+    sprintf(buf, "HTTP/1.1 206 Partial Content\r\n");    
+    sprintf(buf, "%sServer: Guan&Wu Web Server\r\n", buf);
+    sprintf(buf, "%sConnection: keep-alive\r\n", buf);
+    sprintf(buf, "%sKeep-Alive: timeout=5, max=100\r\n", buf);
+    sprintf(buf, "%sContent-type: %s\r\n", buf, fileType);
 
     // printf("\n\n%d, %lu  %lu  %lu \n", fd, begin, end, contentLength);
-    sprintf(buf, "%sContent-Range: bytes %d-%d/%d\r\n", buf, begin, end, fileSize);
+    sprintf(buf, "%sContent-Range: bytes %d-%d/%d\r\n", buf, begin, end, end + 1);
     sprintf(buf, "%sContent-length: %d\r\n\r\n", buf, contentLength);
-    
-    // printf("%d \n", contentLength);
 
     printf("%s", buf);
-    rio_writen(fd, buf, strlen(buf));       
+    
+    // printf("%d \n", contentLength);
+    rio_writen(fd, buf, strlen(buf));       // 返回headers
 
     /* Send response body to client */
     if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
@@ -226,7 +227,7 @@ void serve_range(int fd, char*fileName,  char* range){
     // printf("%p     %p     %lu\n\n\n\n\n", (void*)srcp, (void*)(srcp + begin), contentLength );
     if(close(srcfd) < 0 )
         server_error("close object file error!");
-    rio_writen(fd, srcp + begin, contentLength);
+    rio_writen(fd, srcp + begin, contentLength);    // 返回文件
     if( munmap(srcp, fileSize) < 0 )
         server_error("unmmap object file error!");
 }
