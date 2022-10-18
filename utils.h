@@ -38,6 +38,7 @@
 #define BUFFER_SZIE 8192
 #define SHORT_STRING_BUF 32
 #define MIDDLE_STRING_BUF 128
+#define SIZE_T_MAX 0xffffffffffffffff
 #define LONG_STRING_BUF ONE_K_SIZE
 // #define CONTENT_BUFFER 4096 << 4
 
