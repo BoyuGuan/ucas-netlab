@@ -13,7 +13,7 @@ void get_filetype(char *filename, char *filetype);
 
 
 // TODO 解决分块时线程抢着写的问题
-// TODO 改写支持keep-alive连接
+// TODO 改写支持keep-alive连接，在riowriten附近出错
 
 
 
@@ -196,7 +196,7 @@ void serve_range(int fd, char*fileName,  char* range){
         begin = 0;
     if (begin >= fileSize)// 给大了，超过视频大小了
         return; // 啥也不干
-    if( (end == SIZE_T_MAX) || (end - begin) > (CHUNK_SIZE - 1) ) // 没给end或者给的end和begin相差太大，切到CHUNK_SIZE大小
+    if( (end == SIZE_T_MAX) || ((end - begin) > (CHUNK_SIZE - 1)) ) // 没给end或者给的end和begin相差太大，切到CHUNK_SIZE大小
             end = begin + CHUNK_SIZE - 1;
     if (end >= fileSize)
         end = fileSize - 1;
@@ -205,12 +205,12 @@ void serve_range(int fd, char*fileName,  char* range){
     get_filetype(fileName, fileType);       
     sprintf(buf, "HTTP/1.1 206 Partial Content\r\n");    
     sprintf(buf, "%sServer: Guan&Wu Web Server\r\n", buf);
-    sprintf(buf, "%sConnection: keep-alive\r\n", buf);
+    sprintf(buf, "%sConnection: close\r\n", buf);
     // sprintf(buf, "%sKeep-Alive: timeout=5, max=100\r\n", buf);
     sprintf(buf, "%sContent-type: %s\r\n", buf, fileType);
 
     // printf("\n\n%d, %lu  %lu  %lu \n", fd, begin, end, contentLength);
-    sprintf(buf, "%sContent-Range: bytes %lu-%lu/%lu\r\n", buf, begin, end, end + 1); // 注意是lu！！！
+    sprintf(buf, "%sContent-Range: bytes %lu-%lu/%lu\r\n", buf, begin, end, fileSize); // 注意是lu！！！
     sprintf(buf, "%sContent-length: %d\r\n\r\n", buf, contentLength);
 
     printf("%s", buf);

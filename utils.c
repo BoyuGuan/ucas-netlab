@@ -92,7 +92,7 @@ void rio_writen(int fd, void *usrbuf, size_t n)
             if (errno == EINTR)  /* Interrupted by system call */
                 nwritten = 0;    /* and call write() again */
             else
-                server_error("rio_writen Error!");       /* errno set by write() */
+                server_error("rio_writen Error Please Check !");       /* errno set by write() */
         }
         nleft -= nwritten;
         bufp += nwritten;
