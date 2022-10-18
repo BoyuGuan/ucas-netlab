@@ -17,7 +17,6 @@
 #include <sys/prctl.h>
 #include <signal.h>
 
-
 // #include <stdarg.h>
 // #include <unistd.h>
 // #include <ctype.h>
@@ -38,15 +37,12 @@
 #define BUFFER_SZIE 8192
 #define SHORT_STRING_BUF 32
 #define MIDDLE_STRING_BUF 128
-#define SIZE_T_MAX 0xffffffffffffffff
+#define SIZE_T_MAX 0xffffffffffffffff   // 默认设为最大值，方便探查是否指定范围
 #define LONG_STRING_BUF ONE_K_SIZE
-// #define CONTENT_BUFFER 4096 << 4
-
-
-
+#define CHUNK_SIZE 1048576   // 传输块大小设置为1M，即一次传输512KB的数据
 #define LISTEN_QUERY_MAX_LEN 512
-
 #define RIO_BUFSIZE ONE_K_SIZE << 3
+
 typedef struct {
     int rio_fd;                /* Descriptor for this internal buf */
     int rio_cnt;               /* Unread bytes in internal buf */
@@ -56,7 +52,7 @@ typedef struct {
 
 
 
-
+// robust IO 健壮性的读写
 void rio_readinitb(rio_t *rp, int fd) ;
 int rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen);
 void rio_writen(int fd, void *usrbuf, size_t n) ;

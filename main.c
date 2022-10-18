@@ -61,6 +61,7 @@ int main(int argc, char** argv)
                 if( getnameinfo(&clientAddress, clientLen, clientHostName, \
                         HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )
                     server_error("80 port getnameinfo error");
+                printf("\n**new request **\n" );
                 printf("Accept connection from (%s,%s)\n", clientHostName, clientPort);
                 if (pthread_create(&newThreadID, NULL, handle_80_thread, conn80FD_P) != 0)
                     server_error("Thread create error!");
@@ -81,7 +82,6 @@ int main(int argc, char** argv)
 
 void *handle_80_thread(void* vargp){
     // 80 端口的线程处理函数
-    // printf("3123978491\n" );
 
     pthread_detach(pthread_self()); 
     int connectFD = *(int*) vargp;
@@ -106,10 +106,7 @@ void *handle_80_thread(void* vargp){
     }
 
     read_request_headers(&clientRio, requestRange);  //读取所有请求内容，并查看是否有Range段，有的话为分段请求
-
-    // parser url
     parseURL(url, fileName) ; //  解析出文件地址
-
     // printf("request file is %s \n", fileName);
 
     if(stat(fileName, &sbuf) < 0){  // 没这文件
@@ -197,20 +194,25 @@ void serve_range(int fd, char*fileName,  char* range){
     sprintf(buf, "%sServer: Guan&Wu Web Server\r\n", buf);
     sprintf(buf, "%sConnection: close\r\n", buf);
     sprintf(buf, "%sContent-type: %s\r\n", buf, fileType);
-    // Content-Range: bytes 0-1023/146515
-    // Content-Length: 1024
     size_t begin = SIZE_T_MAX, end = SIZE_T_MAX;
     sscanf(range, "Range: bytes=%lu-%lu", &begin, &end);
-    if (end == SIZE_T_MAX)
-        end = fileSize - 1;
-    if (begin == SIZE_T_MAX)
+    if (begin == SIZE_T_MAX)  // 没给begin，默认是0
         begin = 0;
-    // begin = 0;
+    if (begin >= fileSize){// 给大了，超过视频大小了
+        begin = fileSize ;
+        end = fileSize - 1;
+    }     
+    if( (end == SIZE_T_MAX) || ( (end - begin) > (CHUNK_SIZE - 1) ) ) // 没给end，或者给的end和begin比太大，传CHUNK_SIZE大小的数据
+        end = begin + CHUNK_SIZE - 1;
+
+    if (end >= fileSize)
+        end = fileSize - 1;
     contentLength = end - begin + 1;
+
+    // printf("\n\n%d, %lu  %lu  %lu \n", fd, begin, end, contentLength);
     sprintf(buf, "%sContent-Range: bytes %d-%d/%d\r\n", buf, begin, end, fileSize);
     sprintf(buf, "%sContent-length: %d\r\n\r\n", buf, contentLength);
     
-    printf("\n\n%d, %lu  %lu  %lu \n", fd, begin, end, contentLength);
     // printf("%d \n", contentLength);
 
     printf("%s", buf);
@@ -221,8 +223,7 @@ void serve_range(int fd, char*fileName,  char* range){
         server_error("open object file error!");
     if ( (srcp = mmap(0, fileSize, PROT_READ, MAP_PRIVATE, srcfd, 0)) == ((void *) -1) )
         server_error("mmap object file function error!");
-    printf( "%lu\n", begin);
-    printf("%p     %p     %lu\n", (void*)srcp, (void*)(srcp + begin), contentLength );
+    // printf("%p     %p     %lu\n\n\n\n\n", (void*)srcp, (void*)(srcp + begin), contentLength );
     if(close(srcfd) < 0 )
         server_error("close object file error!");
     rio_writen(fd, srcp + begin, contentLength);
@@ -271,8 +272,7 @@ void read_request_headers(rio_t *rp, char* partialRange)
         rio_readlineb(rp, buf, ONE_K_SIZE);
         printf("%s", buf);
         if ( strstr(buf, "Range"))
-            strcpy(partialRange, buf);
-        
+            strcpy(partialRange, buf);        
     }
     return;
 }
