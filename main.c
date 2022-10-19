@@ -19,12 +19,14 @@ void get_filetype(char *filename, char *filetype);
 
 int main(int argc, char** argv)
 {
+    signal(SIGPIPE, sigpipe_handler); // 忽略pipe错误，此错误会在对方关闭了TCP连接后己方仍要写时处罚
     char clientHostName[HOSTNAME_LEN], clientPort[PORT_LEN];
     pid_t process443Pid, process80Pid;
 
     // 创建两个子进程，一个是进程处理443的https，一个进程处理80的http
     if ( (process443Pid = fork()) == 0  )
     {   // 443端口的子进程
+        signal(SIGPIPE, sigpipe_handler); // 忽略pipe错误，此错误会在对方关闭了TCP连接后己方仍要写时处罚
         int listen443FD = open_listen_fd("443");
         // printf("443 port listen fd is %d \n", listen443FD);
         prctl(PR_SET_PDEATHSIG, SIGTERM);  // 父进程死后杀死自己
@@ -44,6 +46,7 @@ int main(int argc, char** argv)
     else{
         if ( (process80Pid = fork()) == 0 )
         {   // 80端口的子进程
+            signal(SIGPIPE, sigpipe_handler); // 忽略pipe错误，此错误会在对方关闭了TCP连接后己方仍要写时处罚
             int listen80FD = open_listen_fd("80");
             // printf("80 port listen fd is %d \n", listen80FD);
             prctl(PR_SET_PDEATHSIG, SIGTERM);  // 父进程死后杀死自己
@@ -82,8 +85,8 @@ int main(int argc, char** argv)
 
 void *handle_80_thread(void* vargp){
     // 80 端口的线程处理函数
-
     pthread_detach(pthread_self()); 
+    signal(SIGPIPE, sigpipe_handler); // 忽略pipe错误，此错误会在对方关闭了TCP连接后己方仍要写时处罚
     int connectFD = *(int*) vargp;
     printf("connectFD %d \n", connectFD);
     char requestRange[ONE_K_SIZE] = "";
@@ -165,7 +168,11 @@ void serve_no_range(int fd, char *fileName, int serviceCode, char* shortMessage)
     sprintf(buf, "%sContent-length: %d\r\n", buf, fileSize);
     sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, fileType);
     printf("response header is:\n%s", buf);
-    rio_writen(fd, buf, strlen(buf));       
+
+    
+
+    if (rio_writen(fd, buf, strlen(buf)) == -1 )
+        return ; 
     // 加密然后再存
 
     /* Send response body to client */
@@ -175,7 +182,9 @@ void serve_no_range(int fd, char *fileName, int serviceCode, char* shortMessage)
         server_error("mmap object file function error!");
     if(close(srcfd) < 0 )
         server_error("close object file error!");
+
     rio_writen(fd, srcp, fileSize);
+
     if( munmap(srcp, fileSize) < 0 )
         server_error("unmmap object file error!");
 
@@ -216,7 +225,9 @@ void serve_range(int fd, char*fileName,  char* range){
     printf("%s", buf);
     
     // printf("%d \n", contentLength);
-    rio_writen(fd, buf, strlen(buf));       // 返回headers
+    // if(close(connectFD))
+    if (  rio_writen(fd, buf, strlen(buf)) == -1 )
+        return ;
 
     /* Send response body to client */
     if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
@@ -226,7 +237,8 @@ void serve_range(int fd, char*fileName,  char* range){
     // printf("%p     %p     %lu\n\n\n\n\n", (void*)srcp, (void*)(srcp + begin), contentLength );
     if(close(srcfd) < 0 )
         server_error("close object file error!");
-    rio_writen(fd, srcp + begin, contentLength);    // 返回文件
+
+    rio_writen(fd, srcp + begin, contentLength);
     if( munmap(srcp, fileSize) < 0 )
         server_error("unmmap object file error!");
 }

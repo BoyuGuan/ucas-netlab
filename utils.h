@@ -52,12 +52,13 @@ typedef struct {
     char rio_buf[RIO_BUFSIZE]; /* Internal buffer */
 } rio_t;
 
+void sigpipe_handler(int unused);
 
 
 // robust IO 健壮性的读写
 void rio_readinitb(rio_t *rp, int fd) ;
 int rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen);
-void rio_writen(int fd, void *usrbuf, size_t n) ;
+int rio_writen(int fd, void *usrbuf, size_t n) ;
 
 
 void server_error(char *errorMsessage);

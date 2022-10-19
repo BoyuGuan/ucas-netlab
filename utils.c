@@ -1,8 +1,11 @@
 #include "utils.h"
 
+void sigpipe_handler(int unused){
+    printf("catch a pipe error connction reset by peer\n");
+}
+
 void server_error(char *errorMsessage){
-    printf("%s", errorMsessage);
-    fprintf(stderr, "%s: %s", strerror(errno) );
+    fprintf(stderr, "%s: %s",errorMsessage,  strerror(errno) );
     exit(1);
 }
 
@@ -81,7 +84,7 @@ int rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen)
 }
 
 
-void rio_writen(int fd, void *usrbuf, size_t n) 
+int rio_writen(int fd, void *usrbuf, size_t n) 
 {
     size_t nleft = n;
     ssize_t nwritten;
@@ -91,12 +94,17 @@ void rio_writen(int fd, void *usrbuf, size_t n)
         if ((nwritten = write(fd, bufp, nleft)) <= 0) {
             if (errno == EINTR)  /* Interrupted by system call */
                 nwritten = 0;    /* and call write() again */
-            else
+            else if ( (errno == EPIPE) || errno == ECONNRESET ) // 在写一个对方已经关闭了的TCP通道fd
+                return -1;
+            else{
+                printf("\n%d\n", errno);
                 server_error("rio_writen Error Please Check !");       /* errno set by write() */
+            }
         }
         nleft -= nwritten;
         bufp += nwritten;
     }
+    return 1;
 }
 
 

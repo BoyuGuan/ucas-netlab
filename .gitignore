@@ -2,3 +2,4 @@
 http-server
 *temp*
 *.mp4
+/log

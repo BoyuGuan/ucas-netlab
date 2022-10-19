@@ -3,7 +3,7 @@ all: http-server
 http-server: *.c
 	gcc -w -g main.c utils.c utils.h -o http-server -lssl -lcrypto -lpthread
 temp: *.c
-	gcc -Wall -g temp.c utils.c utils.h -o temp -lssl -lcrypto -lpthread
+	gcc -w -g temp.c utils.c utils.h -o temp -lssl -lcrypto -lpthread
 
 clean:
 	@rm http-server
