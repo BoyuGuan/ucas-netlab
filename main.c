@@ -12,11 +12,6 @@ void serve_video(int fd, char *fileName, int serviceCode, char *serviceShortMess
 void get_filetype(char *filename, char *filetype);
 
 
-// TODO 修复VLC初始化播放只能播放一部分的问题，方案：若请求是XX-（也就是没有end），就建立连接后不断向端口写。
-// TODO 改写支持keep-alive连接
-
-
-
 int main(int argc, char** argv)
 {
     signal(SIGPIPE, sigpipe_handler); // 忽略pipe错误，此错误会在对方关闭了TCP连接后己方仍要写时处罚
