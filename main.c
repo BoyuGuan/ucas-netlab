@@ -12,8 +12,8 @@ void serve_video(int fd, char *fileName, int serviceCode, char *serviceShortMess
 void get_filetype(char *filename, char *filetype);
 
 
-// TODO 解决分块时线程抢着写的问题
-// TODO 改写支持keep-alive连接，在riowriten附近出错
+// TODO 修复VLC初始化播放只能播放一部分的问题，方案：若请求是XX-（也就是没有end），就建立连接后不断向端口写。
+// TODO 改写支持keep-alive连接
 
 
 
@@ -201,14 +201,15 @@ void serve_range(int fd, char*fileName,  char* range){
 
     size_t begin = SIZE_T_MAX, end = SIZE_T_MAX;
     sscanf(range, "Range: bytes=%lu-%lu", &begin, &end);
+
     if (begin == SIZE_T_MAX)  // 没给begin，默认是0
         begin = 0;
     if (begin >= fileSize)// 给大了，超过视频大小了
         return; // 啥也不干
-    if( (end == SIZE_T_MAX) || ((end - begin) > (CHUNK_SIZE - 1)) ) // 没给end或者给的end和begin相差太大，切到CHUNK_SIZE大小
-            end = begin + CHUNK_SIZE - 1;
-    if (end >= fileSize)
-        end = fileSize - 1;
+    
+    if(end == SIZE_T_MAX)  // 没给end，也就是读到头
+        end = fileSize-1;
+
     contentLength = end - begin + 1;
     
     get_filetype(fileName, fileType);       
@@ -237,8 +238,20 @@ void serve_range(int fd, char*fileName,  char* range){
     // printf("%p     %p     %lu\n\n\n\n\n", (void*)srcp, (void*)(srcp + begin), contentLength );
     if(close(srcfd) < 0 )
         server_error("close object file error!");
+    size_t loops =  contentLength / MINI_CHUNK_SIZE;
+    int remain  = contentLength % MINI_CHUNK_SIZE, dataStatusCode = 0;
+    // printf("loops is:%lu   remain:%d\n", loops, remain);
 
-    rio_writen(fd, srcp + begin, contentLength);
+    for (size_t i = 0; i < loops ; i++){
+       if( rio_writen(fd, srcp + i * MINI_CHUNK_SIZE + begin, MINI_CHUNK_SIZE) == -1 ){
+            dataStatusCode = 1;
+            // printf("\n\ncatch a write error! %lu %lu %lu/%lu\n", begin, end, i, loops);
+            break;
+       }
+    //    printf("%lu\n", i);
+    }
+    if(dataStatusCode == 0)
+        rio_writen(fd, srcp + MINI_CHUNK_SIZE * loops + begin, remain);
     if( munmap(srcp, fileSize) < 0 )
         server_error("unmmap object file error!");
 }
