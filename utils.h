@@ -16,6 +16,11 @@
 #include <sys/mman.h>
 #include <sys/prctl.h>
 #include <signal.h>
+// #include <openssl/evp.h>
+#include <openssl/x509.h>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+#include <openssl/pem.h>
 
 // #include <stdarg.h>
 // #include <unistd.h>
@@ -34,7 +39,7 @@
 #define PORT_LEN 8
 #define ONE_K_SIZE  1024
 #define FOUR_K_SIZE  4096
-#define BUFFER_SZIE 8192
+#define BUFFER_SIZE 8192
 #define SHORT_STRING_BUF 32
 #define MIDDLE_STRING_BUF 128
 #define SIZE_T_MAX 0xffffffffffffffff   // 默认设为最大值，方便探查是否指定范围
@@ -53,8 +58,21 @@ typedef struct {
     char rio_buf[RIO_BUFSIZE]; /* Internal buffer */
 } rio_t;
 
+struct thread_80_request{   // 80线程处理函数的参数结构
+    int connectFD;  // 线程对应连接的文件描述符
+    char clientHostName[HOSTNAME_LEN];  // 线程对应连接的客户端地址
+};
+
+struct thread_443_request { // 443线程处理函数的参数结构
+	int connectFD;
+	SSL_CTX *ctx;
+};
+
+
 void sigpipe_handler(int unused);
 
+// 测试函数
+void testOK();
 
 // robust IO 健壮性的读写
 void rio_readinitb(rio_t *rp, int fd) ;

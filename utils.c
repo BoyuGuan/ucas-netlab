@@ -9,6 +9,9 @@ void server_error(char *errorMsessage){
     exit(1);
 }
 
+void testOK(){  // 简单的测试函数
+    printf("--------------I'm here 1--------------\n");
+}
 
 void rio_readinitb(rio_t *rp, int fd) 
 {
@@ -148,6 +151,3 @@ int open_listen_fd(char *port){
     }
     return listenFD;
  }
-    
-
-
