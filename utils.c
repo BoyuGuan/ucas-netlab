@@ -5,13 +5,13 @@ void sigpipe_handler(int unused){
 }
 
 void server_error(char *errorMsessage){
-    fprintf(stderr, "%s: %s",errorMsessage,  strerror(errno) );
+    fprintf(stderr, "%s: (%d) %s",errorMsessage, errno ,strerror(errno) );
     exit(1);
 }
 
-void testOK(){  // 简单的测试函数
-    printf("--------------I'm here 1--------------\n");
-}
+// void testOK(){  // 简单的测试函数
+//     printf("--------------I'm here 1--------------\n");
+// }
 
 void rio_readinitb(rio_t *rp, int fd) 
 {
@@ -19,6 +19,15 @@ void rio_readinitb(rio_t *rp, int fd)
     rp->rio_cnt = 0;  
     rp->rio_bufptr = rp->rio_buf;
 }
+
+void rio_ssl_readinitb(rio_ssl_t *rp, SSL* ssl) 
+{
+    rp->ssl = ssl;
+    rp->rio_cnt = 0;  
+    rp->rio_bufptr = rp->rio_buf;
+}
+
+
 
 
 /* 
@@ -56,6 +65,75 @@ static ssize_t rio_read(rio_t *rp, char *usrbuf, size_t n)
     return cnt;
 }
 /* $end rio_read */
+
+/* 
+ * rio_read - This is a wrapper for the Unix read() function that
+ *    transfers min(n, rio_cnt) bytes from an internal buffer to a user
+ *    buffer, where n is the number of bytes requested by the user and
+ *    rio_cnt is the number of unread bytes in the internal buffer. On
+ *    entry, rio_read() refills the internal buffer via a call to
+ *    read() if the internal buffer is empty.
+ */
+/* $begin rio_read */
+static ssize_t rio_ssl_read(rio_ssl_t *rp, char *usrbuf, size_t n)
+{
+    int cnt;
+
+    while (rp->rio_cnt <= 0) {  /* Refill if buf is empty */
+        rp->rio_cnt = SSL_read(rp->ssl, (void *)rp->rio_buf, sizeof(rp->rio_buf));
+        printf("dasd\n");
+        if (rp->rio_cnt < 0) {
+            if (errno != EINTR) /* Interrupted by system call*/
+                return -1;
+        }
+        else if (rp->rio_cnt == 0)  /* EOF */
+            return 0;
+        else 
+            rp->rio_bufptr = rp->rio_buf;   /* Read success, reset buffer ptr */
+    }
+
+    /* Copy min(n, rp->rio_cnt) bytes from internal buf to user buf */
+    cnt = n;
+    if(rp->rio_cnt < n)
+        cnt = rp->rio_cnt;
+    memcpy(usrbuf, rp->rio_bufptr, cnt);
+    rp->rio_bufptr += cnt;
+    rp->rio_cnt -= cnt;
+    return cnt;
+}
+
+/* $end rio_read */
+
+
+// Robustly ssl read a text line (buffered)
+int rio_ssl_readlineb(rio_t *rp, void *usrbuf, size_t maxlen) 
+{
+    int n, rc;
+    char c, *bufp = usrbuf;
+
+    for (n = 1; n < maxlen; n++) { 
+        if ((rc = rio_ssl_read(rp, &c, 1)) == 1) {
+            // read success
+            *bufp++ = c;
+            if (c == '\n') {
+                n++;
+                break;
+            }
+        } else if (rc == 0) {
+            if (n == 1)
+                return 0; /* EOF, no data read */
+            else
+                break;    /* EOF, some data was read */
+        } else
+            server_error("rio_ssl_readlineb Error!");	  /* Error */
+    }
+
+    *bufp = 0;
+    if ( n - 1 < 0)
+        server_error("Rio_readline Error!");
+    return n-1;
+}
+
 
 // Robustly read a text line (buffered)
 int rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen) 
@@ -110,7 +188,29 @@ int rio_writen(int fd, void *usrbuf, size_t n)
     return 1;
 }
 
+int rio_ssl_writen(SSL* ssl, void *usrbuf, size_t n) {
+    size_t nleft = n;
+    ssize_t nwritten;
+    char *bufp = usrbuf;
 
+    while (nleft > 0) {
+        if ((nwritten = SSL_write(ssl, bufp, nleft)) <= 0) {
+            if (errno == EINTR)  /* Interrupted by system call */
+                nwritten = 0;    /* and call write() again */
+            else if ( (errno == EPIPE) || errno == ECONNRESET ) // 在写一个对方已经关闭了的TCP通道fd
+                return -1;
+            else{
+                printf("\n%d\n", errno);
+                server_error("rio_writen Error Please Check !");       /* errno set by write() */
+            }
+        }
+        nleft -= nwritten;
+        bufp += nwritten;
+    }
+    return 1;
+}
+
+// 打开端口进行监听，集合了 socket()+bind()+listen()函数
 int open_listen_fd(char *port){
     struct addrinfo hints, *addrInfoList, *addressPointer;
     int listenFD, rc, optval = 1;

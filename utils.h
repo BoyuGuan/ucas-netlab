@@ -58,6 +58,14 @@ typedef struct {
     char rio_buf[RIO_BUFSIZE]; /* Internal buffer */
 } rio_t;
 
+typedef struct {
+    SSL* ssl;                   /* ssl pointer for this internal buf */
+    int rio_cnt;               /* Unread bytes in internal buf */
+    char *rio_bufptr;          /* Next unread byte in internal buf */
+    char rio_buf[RIO_BUFSIZE]; /* Internal buffer */
+} rio_ssl_t;
+
+
 struct thread_80_request{   // 80线程处理函数的参数结构
     int connectFD;  // 线程对应连接的文件描述符
     char clientHostName[HOSTNAME_LEN];  // 线程对应连接的客户端地址
@@ -72,22 +80,22 @@ struct thread_443_request { // 443线程处理函数的参数结构
 void sigpipe_handler(int unused);
 
 // 测试函数
-void testOK();
+// void testOK();
 
 // robust IO 健壮性的读写
 void rio_readinitb(rio_t *rp, int fd) ;
 int rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen);
 int rio_writen(int fd, void *usrbuf, size_t n) ;
 
+// ssl版本的robust IO
+void rio_ssl_readinitb(rio_ssl_t *rp, SSL* ssl);
+int rio_ssl_readlineb(rio_t *rp, void *usrbuf, size_t maxlen);
+int rio_ssl_writen(SSL* ssl, void *usrbuf, size_t n);
+
+
 
 void server_error(char *errorMsessage);
 int open_listen_fd(char *port);
-
-
-
-
-
-
 
 
 

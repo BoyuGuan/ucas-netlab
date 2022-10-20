@@ -1,6 +1,5 @@
 #include "utils.h"
 
-void clienterror(int fd, char *cause, char *errnum, char *shortErroMessage, char *longErrorMessage);
 void read_request_headers(rio_t *rp, char* partialRange);
 void *handle_80_thread(void* vargp);
 void *handle_443_thread(void* vargp);
@@ -57,7 +56,7 @@ int main(int argc, char** argv)
                 server_error("443 port accept error!");
             if( getnameinfo(&clientAddress, clientLen, clientHostName,  HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )
                 server_error("443 port getnameinfo error");
-            printf("-------------443------------\n");
+            // printf("-------------443------------\n");
             // printf("%s  %d %s \n", './dir/test.html', 200, "OK" );
             // printf()
             printf("**NEW REQUEST**: 443 Accept connection from (%s,%s)\n", clientHostName, clientPort);
@@ -154,11 +153,14 @@ void *handle_443_thread(void* vargp){
     if( !SSL_set_fd(ssl, connectFD))
         server_error("ssl set fd error!");
     int SSLAcceptCode = SSL_accept(ssl) ;
-    if( SSLAcceptCode == 0){
+    if( SSLAcceptCode == 0 ){
         printf("The TLS/SSL handshake was not successful but was shut down controlled and by the specifications of the TLS/SSL protocol.\n");
+        SSL_shutdown(ssl);
+        SSL_free(ssl);
+        close(connectFD);
         return;
     }else if (SSLAcceptCode < 0){
-        printf("%d__________\n", SSLAcceptCode);
+        // printf("%d__________\n", SSLAcceptCode);
         SSL_shutdown(ssl);
         SSL_free(ssl);
         close(connectFD);
@@ -169,35 +171,23 @@ void *handle_443_thread(void* vargp){
     char requestRange[ONE_K_SIZE] = "";
     char buf[BUFFER_SIZE], method[SHORT_STRING_BUF], url[ONE_K_SIZE], \
         httpVersion[SHORT_STRING_BUF], fileName[ONE_K_SIZE]=""; 
-    
-    // serve_no_range2(connectFD, './dir/test.html', 200, "OK");
 
     // size_t readBytes;
-    // printf("asdasd");
-    // int readCode = SSL_read_ex(ssl, (void *)buf, BUFFER_SIZE, readBytes);
-    // printf("\nread code is %d \n\n", readCode);
-    // printf("%lu\n%s\n", readBytes, buf);
-    
-    // testOK();
-    server_response(ssl, "./dir/501.html", 200, "OK", "");
+    // int readCode = SSL_read(ssl, (void *)buf, BUFFER_SIZE);
 
-    SSL_shutdown(ssl);
-    SSL_free(ssl);
-    close(connectFD);
-
-    return;
+    rio_ssl_t clientRio;
 
     // 读取请求
-    rio_t clientRio;
-    rio_readinitb(&clientRio, connectFD);
-    if (!rio_readlineb(&clientRio, buf, BUFFER_SIZE))  
-        // 空请求
-        return;
+    rio_ssl_readinitb(&clientRio, ssl);
+    if( !rio_ssl_readlineb(&clientRio, buf, BUFFER_SIZE)){   // 空请求
+        printf("we not here\n");
+        SSL_shutdown(ssl);
+        SSL_free(ssl);
+        close(connectFD);
+    }
+    printf("request content is \n%s", buf);
     sscanf(buf, "%s %s %s", method, url, httpVersion );
-    printf("request is \n%s", buf);
     if (strcasecmp(method, "GET")) {    // 只支持GET 方法
-        // char file_501[20] = 
-        // ser
         server_response(connectFD, "./dir/501.html", 501, "Not Implemented", NULL);
         return;
     }
@@ -228,19 +218,18 @@ void *handle_443_thread(void* vargp){
     if(close(connectFD) < 0)
         server_error("close conncet fd error!");  
 
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+    close(connectFD);
+
 }
 
-
-
 void server_response(SSL* ssl , char *fileName, int serviceCode, char* shortMessage, char* range){
-    // printf("%s  %d %s \n", fileName, serviceCode, shortMessage );
     if(serviceCode != 206)
         serve_no_range(ssl, fileName, serviceCode, shortMessage);
     else
         serve_range(ssl, fileName, range);
 }
-
-// void respond_header( )
 
 void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessage){
 
@@ -248,9 +237,10 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
     stat(fileName, &sbuf);
     int srcfd, fileSize = sbuf.st_size;
     char *srcp, fileType[MIDDLE_STRING_BUF], buf[FOUR_K_SIZE];
-    printf("serverCode: %d   shortMessage: %s  file name: %s  file size : %d \n", serviceCode, shortMessage, fileName ,fileSize);
+    // printf("serverCode: %d   shortMessage: %s  file name: %s  file size : %d \n", serviceCode, shortMessage, fileName ,fileSize);
     /* Send response headers to client */
-    get_filetype(fileName, fileType);       
+    get_filetype(fileName, fileType); 
+      
     sprintf(buf, "HTTP/1.1 %d %s\r\n", serviceCode, shortMessage);    
     sprintf(buf, "%sServer: Guan&Wu Web Server\r\n", buf);
     sprintf(buf, "%sConnection: close\r\n", buf);   // 注意，如果不是close而是keep-alive，在请求后会一直转圈
@@ -259,7 +249,8 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
     sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, fileType);
     printf("response header is:\n%s", buf);
 
-    int written;
+    size_t written;
+    
     SSL_write_ex(ssl, buf, strlen(buf), &written);
     if( written != strlen(buf) )
         return ;
@@ -267,15 +258,7 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
     /* Send response body to client */
     if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
         server_error("open object file error!");
-    printf("%d %d\n", fileSize, srcfd);
-  
-    /* Read request line and headers */
-    rio_t rio;
-    rio_readinitb(&rio, srcfd);
-    char tempBuf[FOUR_K_SIZE];
-    rio_readlineb(&rio, tempBuf, FOUR_K_SIZE);     
-    // printf("dasdasd----------\n");
-    // printf("------------dadsd----%s\n", tempBuf );  
+
     // mmap(0, fileSize, PROT_READ, MAP_PRIVATE, srcfd, 0);
     if ( (srcp = mmap(0, fileSize, PROT_READ, MAP_PRIVATE, srcfd, 0)) == ((void *) -1) )
         server_error("mmap object file function error!");
@@ -283,6 +266,9 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
         server_error("close object file error!");
 
     SSL_write_ex(ssl, srcp, fileSize, &written);
+    if(fileSize != written){
+        printf("not enough\n");
+    }
 
     if( munmap(srcp, fileSize) < 0 )
         server_error("unmmap object file error!");
@@ -325,7 +311,7 @@ void serve_range(SSL* ssl, char*fileName,  char* range){
     
     // printf("%d \n", contentLength);
     // if(close(connectFD))
-    int written;
+    size_t written;
     if( SSL_write_ex(ssl, buf, strlen(buf), &written) != strlen(buf) )
         return;
 
