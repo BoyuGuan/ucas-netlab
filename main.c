@@ -5,15 +5,11 @@ void *handle_80_thread(void* vargp);
 void *handle_443_thread(void* vargp);
 void redirectTo443Use301(int fd, char* newRequestTarget);
 void parseURL(char* url, char* fileName);
-// void serve_static(int fd, char *fileName, int serverCode, char* shortErrorMessage, char* range); //多传一个是否需要加密
 void server_response(SSL* ssl , char *fileName, int serviceCode, char* shortMessage, char* range);
 void serve_no_range(SSL* ssl, char *fileName, int serviceCode, char* shortErrorMessage);
 void serve_range(SSL* ssl, char*fileName,  char* range);
 void serve_video(int fd, char *fileName, int serviceCode, char *serviceShortMesssage, char* range);
 void get_filetype(char *filename, char *filetype);
-
-// TODO  需要处理tls协议连接成功后不能正常运行的问题
-
 
 
 int main(int argc, char** argv)
@@ -23,16 +19,14 @@ int main(int argc, char** argv)
     pid_t process443Pid, process80Pid;
 
     // 创建两个子进程，一个是进程处理443的https，一个进程处理80的http
-    if ( (process443Pid = fork()) == 0  )
+    if ( (process443Pid = fork()) == 0  )   
     {   // 443端口的子进程
 
-        // init SSL Library
+        // 初始化SSL环境
         SSL_library_init();
         OpenSSL_add_all_algorithms();
         SSL_load_error_strings();
-        // enable TLS method
-        // const SSL_METHOD *method = TLS_server_method();  // 支持TLS server端方法
-        const SSL_METHOD *method = TLSv1_2_server_method();  // 支持TLSv1.2 server端方法
+        const SSL_METHOD *method = TLS_server_method();  // 支持TLS server版方法，包含TLSV1.2和TLSV1.3等
         SSL_CTX *ctx = SSL_CTX_new(method);
         if( !ctx )
             server_error( "Init ssl ctx error" );
@@ -50,17 +44,15 @@ int main(int argc, char** argv)
         pthread_t newThreadID;
         while (1)
         {
+            // 注意此处一定要用指针指向一个malloc出来的值，否则用实例传地址的话会导致主线程下一步for循环覆盖掉这个实例产生race
             struct thread_443_request* request443P = malloc(sizeof(struct thread_443_request)) ;
             request443P->ctx = ctx;
-            if((request443P->connectFD = accept(listen443FD, &clientAddress, &clientLen ) ) < 0 ) 
+            if((request443P->connectFD = accept(listen443FD, &clientAddress, &clientLen ) ) < 0 ) // 新请求的fd
                 server_error("443 port accept error!");
-            if( getnameinfo(&clientAddress, clientLen, clientHostName,  HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )
+            if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )   // 得到对方的主机名（ip）与对方的端口
                 server_error("443 port getnameinfo error");
-            // printf("-------------443------------\n");
-            // printf("%s  %d %s \n", './dir/test.html', 200, "OK" );
-            // printf()
             printf("**NEW REQUEST**: 443 Accept connection from (%s,%s)\n", clientHostName, clientPort);
-            if (pthread_create(&newThreadID, NULL, handle_443_thread, (void*)request443P) != 0)
+            if (pthread_create(&newThreadID, NULL, handle_443_thread, (void*)request443P) != 0)     // 创建新线程来处理该请求，这样就可以实现并发服务器
                 server_error("Thread create error!");
         }
         
@@ -75,19 +67,15 @@ int main(int argc, char** argv)
             __socklen_t clientLen = sizeof(clientAddress);
             pthread_t newThreadID;
             while (1){
-                // 注意此处一定要用指针指向一个malloc出来的值，否则用实例传地址的话会导致主线程下一步for循环覆盖掉这个实例
+                // 注意此处一定要用指针指向一个malloc出来的值，否则用实例传地址的话会导致主线程下一步for循环覆盖掉这个实例产生race
                 struct thread_80_request * request80P = malloc(sizeof(struct thread_80_request));
-                if((request80P->connectFD = accept(listen80FD,  &clientAddress, &clientLen ) ) < 0 ) 
+                if((request80P->connectFD = accept(listen80FD,  &clientAddress, &clientLen ) ) < 0 )    // 同80
                     server_error("80 port accept error!");
-
-                // if((*conn80FD_P = accept(listen80FD,  &clientAddress, &clientLen ) ) < 0 ) 
-                //     server_error("80 port accept error!");
-                if( getnameinfo(&clientAddress, clientLen, clientHostName, \
-                        HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )
+                if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )    // 同80
                     server_error("80 port getnameinfo error");
-                printf("**NEW REQUEST**: 80 Accept connection from (%s,%s)\n", clientHostName, clientPort);
+                printf("**NEW REQUEST**: 80 Accept connection from (%s,%s)\n", clientHostName, clientPort); // 同80
                 strcpy(request80P->clientHostName, clientHostName);
-                if (pthread_create(&newThreadID, NULL, handle_80_thread, (void *)request80P) != 0)
+                if (pthread_create(&newThreadID, NULL, handle_80_thread, (void *)request80P) != 0)  // 同80
                     server_error("Thread create error!");
                 // printf("\ntest2\n");
             }
@@ -95,7 +83,7 @@ int main(int argc, char** argv)
         else{
             while (1)
             {
-                // 服务器主进程
+                // 服务器主进程，等俩子进程跑
                 ;
             }
             
@@ -104,7 +92,7 @@ int main(int argc, char** argv)
     return 0;
 }
 
-// 80 端口的线程处理函数，在支持https的服务器上唯一的作用就是用来把请求转发到443端口
+// 80 端口的线程处理函数，在支持https的服务器上唯一的作用就是用301把请求转发到443端口
 void *handle_80_thread(void* vargp){    
     pthread_detach(pthread_self());     //  分离线程，方便其自动回收
     
@@ -113,13 +101,14 @@ void *handle_80_thread(void* vargp){
     char clientHostName[HOSTNAME_LEN];
     strcpy(clientHostName, request80P->clientHostName);
     free(vargp);
-    // printf("Accept connection from (%s) fd is %d\n", clientHostName, connectFD);
-    char buf[BUFFER_SIZE], method[SHORT_STRING_BUF], httpVersion[SHORT_STRING_BUF],\
+    char buf[BUFFER_SIZE], method[SHORT_STRING_BUF], httpVersion[SHORT_STRING_BUF], \
         url[ONE_K_SIZE], newRequestTarget[ONE_K_SIZE]="https://" ; 
     
-    // 这里是因为我们没有备案，所以走不了公网的80端口，只能通过zerotier或者wireguard组内网
+    // 因为我们没有备案，所以走不了公网的80端口，只能通过zerotier或者wireguard组内网
+    // zerotier我用的是 192.168.196.0/24子网，wireguard我用的是10.0.0.0/24子网
     // 两者通过ip第二位可以区分开，zerotier内网过来的包，走服务器在zerotier上的ip 192.168.196.7，
     // 否则就是wireguard内网过来的包，走服务器在wireguard上的ip 10.0.0.7，
+
     // 读取请求
     rio_t clientRio;
     rio_readinitb(&clientRio, connectFD);
@@ -147,20 +136,14 @@ void *handle_443_thread(void* vargp){
 	SSL_CTX *ctx = request443P -> ctx;
     free(request443P);
 
-    SSL	*ssl = SSL_new(ctx);
+    SSL	*ssl = SSL_new(ctx);    // 根据之前设定的ctx来创建新的ssl会话
     if( !ssl )
         server_error("Create ssl error!");
-    if( !SSL_set_fd(ssl, connectFD))
+    if( !SSL_set_fd(ssl, connectFD))    // ssl会话绑定文件描述符
         server_error("ssl set fd error!");
-    int SSLAcceptCode = SSL_accept(ssl) ;
-    if( SSLAcceptCode == 0 ){
-        printf("The TLS/SSL handshake was not successful but was shut down controlled and by the specifications of the TLS/SSL protocol.\n");
-        SSL_shutdown(ssl);
-        SSL_free(ssl);
-        close(connectFD);
-        return;
-    }else if (SSLAcceptCode < 0){
-        // printf("%d__________\n", SSLAcceptCode);
+    int SSLAcceptCode = SSL_accept(ssl) ;   // ssl会话accept进行TLS握手连接
+    if( SSLAcceptCode <= 0 ){
+        // printf("The TLS/SSL handshake was not successful, but not a .\n");
         SSL_shutdown(ssl);
         SSL_free(ssl);
         close(connectFD);
@@ -168,22 +151,19 @@ void *handle_443_thread(void* vargp){
         return;
     }
 
-    char requestRange[ONE_K_SIZE] = "";
+    char requestRange[ONE_K_SIZE] = "No Range";
     char buf[BUFFER_SIZE], method[SHORT_STRING_BUF], url[ONE_K_SIZE], \
         httpVersion[SHORT_STRING_BUF], fileName[ONE_K_SIZE]=""; 
-
 
     rio_ssl_t clientRio;
 
     // 读取请求
     rio_ssl_readinitb(&clientRio, ssl);
     if( !rio_ssl_readlineb(&clientRio, buf, BUFFER_SIZE)){   // 空请求
-        printf("we not here\n");
         SSL_shutdown(ssl);
         SSL_free(ssl);
         close(connectFD);
     }
-    
 
     printf("request content is \n%s", buf);
     sscanf(buf, "%s %s %s", method, url, httpVersion );
@@ -191,18 +171,8 @@ void *handle_443_thread(void* vargp){
         server_response(ssl, "./dir/501.html", 501, "Not Implemented", NULL);
         return;
     }
-    
-
     read_request_headers(&clientRio, requestRange);  //读取所有请求内容，并查看是否有Range段，有的话为分段请求
-    
-    // server_response(ssl, "./dir/501.html", 200, "OK", "");
-    // SSL_shutdown(ssl);
-    // SSL_free(ssl);
-    // close(connectFD);
-    // return;
-    
     parseURL(url, fileName) ; //  解析出文件地址
-    // printf("request file is %s \n", fileName);
 
     struct stat sbuf;   // 该文件状态
     if(stat(fileName, &sbuf) < 0){  // 没这文件
@@ -218,9 +188,7 @@ void *handle_443_thread(void* vargp){
     int successServerCode = 200; // 请求成功的类型种类（是普通请求的话是200，分段的话是206）
     char successServerShortMessage[SHORT_STRING_BUF] = "OK";
 
-    // server_response(ssl, "./dir/test.html", 200, "OK", "");
-
-    if(strcmp(requestRange,"")) { // 请求是range分段请求
+    if(strcmp(requestRange, "No Range")) { // 请求是range分段请求
         successServerCode = 206;
         strcpy(successServerShortMessage, "Partial Content");
     }
@@ -245,7 +213,7 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
     int srcfd, fileSize = sbuf.st_size;
     char *srcp, fileType[MIDDLE_STRING_BUF], buf[FOUR_K_SIZE];
     // printf("serverCode: %d   shortMessage: %s  file name: %s  file size : %d \n", serviceCode, shortMessage, fileName ,fileSize);
-    /* Send response headers to client */
+    // 发headers给client
     get_filetype(fileName, fileType); 
     
     sprintf(buf, "HTTP/1.1 %d %s\r\n", serviceCode, shortMessage);    
@@ -258,14 +226,12 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
 
     if( rio_ssl_writen(ssl, buf, strlen(buf)) != 1 )
         return ;
-    // printf("\ndasd\n");
 
-    /* Send response body to client */
+    //  发所请求的文件内容给client
     if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
         server_error("open object file error!");
 
-    // mmap(0, fileSize, PROT_READ, MAP_PRIVATE, srcfd, 0);
-    if ( (srcp = mmap(0, fileSize, PROT_READ, MAP_PRIVATE, srcfd, 0)) == ((void *) -1) )
+    if ( (srcp = mmap(0, fileSize, PROT_READ, MAP_PRIVATE, srcfd, 0)) == ((void *) -1) ) // 内存映射，加快速度
         server_error("mmap object file function error!");
     if(close(srcfd) < 0 )
         server_error("close object file error!");
@@ -302,25 +268,17 @@ void serve_range(SSL* ssl, char*fileName,  char* range){
     sprintf(buf, "%sConnection: close\r\n", buf);
     // sprintf(buf, "%sKeep-Alive: timeout=5, max=100\r\n", buf);
     sprintf(buf, "%sContent-type: %s\r\n", buf, fileType);
-
-    // printf("\n\n%d, %lu  %lu  %lu \n", fd, begin, end, contentLength);
     sprintf(buf, "%sContent-Range: bytes %lu-%lu/%lu\r\n", buf, begin, end, fileSize); // 注意是lu！！！
     sprintf(buf, "%sContent-length: %d\r\n\r\n", buf, contentLength);
-
     printf("%s", buf);
     
-    // printf("14hcqiofvq8yr1849rh98e1c81cry0r8c01982rcyb \n");
-    // if(close(connectFD))
     if( rio_ssl_writen(ssl, buf, strlen(buf)) != 1 )
         return;
-    
-
-    /* Send response body to client */
+    // 发headers
     if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
         server_error("open object file error!");
     if ( (srcp = mmap(0, fileSize, PROT_READ, MAP_PRIVATE, srcfd, 0)) == ((void *) -1) )
         server_error("mmap object file function error!");
-    // printf("%p     %p     %lu\n\n\n\n\n", (void*)srcp, (void*)(srcp + begin), contentLength );
     if(close(srcfd) < 0 )
         server_error("close object file error!");
     size_t loops =  contentLength / MINI_CHUNK_SIZE;
@@ -341,7 +299,7 @@ void serve_range(SSL* ssl, char*fileName,  char* range){
 }
 
 
-
+// 解析请求的文件类型
 void get_filetype(char *filename, char *filetype) 
 {
     if (strstr(filename, ".html"))
@@ -358,7 +316,7 @@ void get_filetype(char *filename, char *filetype)
         strcpy(filetype, "text/plain");
 }  
 
-
+// 解析URL，搞出文件的相对路径
 void parseURL(char* url, char* fileName){
     strcpy(fileName, "./dir");
     strcat(fileName, url);
@@ -367,9 +325,9 @@ void parseURL(char* url, char* fileName){
 
 }
 
-
+ // 阅读请求头部，并判断是否请求中包含range
 void read_request_headers(rio_ssl_t *rp, char* partialRange) 
-{   // 阅读请求头部，并判断是否请求中包含range
+{ 
     char buf[ONE_K_SIZE];
 
     rio_ssl_readlineb(rp, buf, ONE_K_SIZE);
@@ -387,7 +345,7 @@ void read_request_headers(rio_ssl_t *rp, char* partialRange)
     return;
 }
 
-
+ // 301重定向到443
 void redirectTo443Use301(int fd, char* newRequestTarget){
     char buf[FOUR_K_SIZE]; 
     sprintf(buf, "HTTP/1.1 301 Moved Permanently\r\n");    

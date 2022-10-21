@@ -8,11 +8,6 @@ void server_error(char *errorMsessage){
     fprintf(stderr, "%s: (%d) %s",errorMsessage, errno ,strerror(errno) );
     exit(1);
 }
-
-// void testOK(){  // 简单的测试函数
-//     printf("--------------I'm here 1--------------\n");
-// }
-
 void rio_readinitb(rio_t *rp, int fd) 
 {
     rp->rio_fd = fd;  
