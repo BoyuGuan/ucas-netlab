@@ -89,7 +89,7 @@ int rio_writen(int fd, void *usrbuf, size_t n) ;
 
 // ssl版本的robust IO
 void rio_ssl_readinitb(rio_ssl_t *rp, SSL* ssl);
-int rio_ssl_readlineb(rio_t *rp, void *usrbuf, size_t maxlen);
+int rio_ssl_readlineb(rio_ssl_t *rp, void *usrbuf, size_t maxlen);
 int rio_ssl_writen(SSL* ssl, void *usrbuf, size_t n);
 
 

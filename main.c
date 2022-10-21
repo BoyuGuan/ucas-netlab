@@ -1,6 +1,6 @@
 #include "utils.h"
 
-void read_request_headers(rio_t *rp, char* partialRange);
+void read_request_headers(rio_ssl_t *rp, char* partialRange);
 void *handle_80_thread(void* vargp);
 void *handle_443_thread(void* vargp);
 void redirectTo443Use301(int fd, char* newRequestTarget);
@@ -172,8 +172,6 @@ void *handle_443_thread(void* vargp){
     char buf[BUFFER_SIZE], method[SHORT_STRING_BUF], url[ONE_K_SIZE], \
         httpVersion[SHORT_STRING_BUF], fileName[ONE_K_SIZE]=""; 
 
-    // size_t readBytes;
-    // int readCode = SSL_read(ssl, (void *)buf, BUFFER_SIZE);
 
     rio_ssl_t clientRio;
 
@@ -185,43 +183,52 @@ void *handle_443_thread(void* vargp){
         SSL_free(ssl);
         close(connectFD);
     }
+    
+
     printf("request content is \n%s", buf);
     sscanf(buf, "%s %s %s", method, url, httpVersion );
     if (strcasecmp(method, "GET")) {    // 只支持GET 方法
-        server_response(connectFD, "./dir/501.html", 501, "Not Implemented", NULL);
+        server_response(ssl, "./dir/501.html", 501, "Not Implemented", NULL);
         return;
     }
+    
 
     read_request_headers(&clientRio, requestRange);  //读取所有请求内容，并查看是否有Range段，有的话为分段请求
+    
+    // server_response(ssl, "./dir/501.html", 200, "OK", "");
+    // SSL_shutdown(ssl);
+    // SSL_free(ssl);
+    // close(connectFD);
+    // return;
+    
     parseURL(url, fileName) ; //  解析出文件地址
     // printf("request file is %s \n", fileName);
 
     struct stat sbuf;   // 该文件状态
     if(stat(fileName, &sbuf) < 0){  // 没这文件
-        server_response(connectFD, "./dir/404.html",  404, "Not Found", NULL);
+        server_response(ssl, "./dir/404.html",  404, "Not Found", NULL);
         return;
     }
     if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) { // 没有权限读的文件
         stat("./dir/403.html", &sbuf);
-        server_response(connectFD, "./dir/403.html",  403, "Forbidden", NULL);
+        server_response(ssl, "./dir/403.html",  403, "Forbidden", NULL);
         return;
     }
 
     int successServerCode = 200; // 请求成功的类型种类（是普通请求的话是200，分段的话是206）
     char successServerShortMessage[SHORT_STRING_BUF] = "OK";
 
+    // server_response(ssl, "./dir/test.html", 200, "OK", "");
+
     if(strcmp(requestRange,"")) { // 请求是range分段请求
         successServerCode = 206;
         strcpy(successServerShortMessage, "Partial Content");
     }
-    server_response(connectFD, fileName,  successServerCode, successServerShortMessage, requestRange);
-    if(close(connectFD) < 0)
-        server_error("close conncet fd error!");  
-
+    server_response(ssl, fileName,  successServerCode, successServerShortMessage, requestRange);
     SSL_shutdown(ssl);
     SSL_free(ssl);
-    close(connectFD);
-
+    if(close(connectFD) < 0)
+        server_error("close conncet fd error!");  
 }
 
 void server_response(SSL* ssl , char *fileName, int serviceCode, char* shortMessage, char* range){
@@ -240,7 +247,7 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
     // printf("serverCode: %d   shortMessage: %s  file name: %s  file size : %d \n", serviceCode, shortMessage, fileName ,fileSize);
     /* Send response headers to client */
     get_filetype(fileName, fileType); 
-      
+    
     sprintf(buf, "HTTP/1.1 %d %s\r\n", serviceCode, shortMessage);    
     sprintf(buf, "%sServer: Guan&Wu Web Server\r\n", buf);
     sprintf(buf, "%sConnection: close\r\n", buf);   // 注意，如果不是close而是keep-alive，在请求后会一直转圈
@@ -249,11 +256,9 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
     sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, fileType);
     printf("response header is:\n%s", buf);
 
-    size_t written;
-    
-    SSL_write_ex(ssl, buf, strlen(buf), &written);
-    if( written != strlen(buf) )
+    if( rio_ssl_writen(ssl, buf, strlen(buf)) != 1 )
         return ;
+    // printf("\ndasd\n");
 
     /* Send response body to client */
     if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
@@ -264,12 +269,7 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
         server_error("mmap object file function error!");
     if(close(srcfd) < 0 )
         server_error("close object file error!");
-
-    SSL_write_ex(ssl, srcp, fileSize, &written);
-    if(fileSize != written){
-        printf("not enough\n");
-    }
-
+    rio_ssl_writen(ssl, srcp, fileSize);
     if( munmap(srcp, fileSize) < 0 )
         server_error("unmmap object file error!");
 }
@@ -309,11 +309,11 @@ void serve_range(SSL* ssl, char*fileName,  char* range){
 
     printf("%s", buf);
     
-    // printf("%d \n", contentLength);
+    // printf("14hcqiofvq8yr1849rh98e1c81cry0r8c01982rcyb \n");
     // if(close(connectFD))
-    size_t written;
-    if( SSL_write_ex(ssl, buf, strlen(buf), &written) != strlen(buf) )
+    if( rio_ssl_writen(ssl, buf, strlen(buf)) != 1 )
         return;
+    
 
     /* Send response body to client */
     if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
@@ -324,19 +324,18 @@ void serve_range(SSL* ssl, char*fileName,  char* range){
     if(close(srcfd) < 0 )
         server_error("close object file error!");
     size_t loops =  contentLength / MINI_CHUNK_SIZE;
-    int remain  = contentLength % MINI_CHUNK_SIZE, dataStatusCode = 0;
+    size_t remain  = contentLength % MINI_CHUNK_SIZE;
+    short dataStatusCode = 0;
     // printf("loops is:%lu   remain:%d\n", loops, remain);
 
     for (size_t i = 0; i < loops ; i++){
-        SSL_write_ex(ssl, srcp + i * MINI_CHUNK_SIZE + begin, MINI_CHUNK_SIZE, written);
-        if( written  != CHUNK_SIZE ){
-                dataStatusCode = 1;
-                // printf("\n\ncatch a write error! %lu %lu %lu/%lu\n", begin, end, i, loops);
-                break;
+        if( rio_ssl_writen(ssl, srcp + i * MINI_CHUNK_SIZE + begin, MINI_CHUNK_SIZE) !=  1 ){
+            dataStatusCode = 1;
+            break;
         }
     }
     if(dataStatusCode == 0)
-        SSL_write(ssl, srcp + MINI_CHUNK_SIZE * loops + begin, remain);
+        rio_ssl_writen(ssl, srcp + MINI_CHUNK_SIZE * loops + begin, remain);
     if( munmap(srcp, fileSize) < 0 )
         server_error("unmmap object file error!");
 }
@@ -369,17 +368,18 @@ void parseURL(char* url, char* fileName){
 }
 
 
-void read_request_headers(rio_t *rp, char* partialRange) 
+void read_request_headers(rio_ssl_t *rp, char* partialRange) 
 {   // 阅读请求头部，并判断是否请求中包含range
     char buf[ONE_K_SIZE];
 
-    rio_readlineb(rp, buf, ONE_K_SIZE);
+    rio_ssl_readlineb(rp, buf, ONE_K_SIZE);
     printf("%s", buf);
     if ( strstr(buf, "Range"))
         strcpy(partialRange, buf);
 
     while(strcmp(buf, "\r\n")) {          // http请求以一行 \r\n结束
-        rio_readlineb(rp, buf, ONE_K_SIZE);
+        // rio_readlineb(rp, buf, ONE_K_SIZE);
+        rio_ssl_readlineb(rp, buf, ONE_K_SIZE);
         printf("%s", buf);
         if ( strstr(buf, "Range"))
             strcpy(partialRange, buf);        
