@@ -11,6 +11,7 @@ void serve_range(SSL* ssl, char*fileName,  char* range);
 void serve_video(int fd, char *fileName, int serviceCode, char *serviceShortMesssage, char* range);
 void get_filetype(char *filename, char *filetype);
 
+// TODO 本项目已经整体上完全完成了老师的所有既定要求，可以进一步提升的点： 支持keep-alive方式连接
 
 int main(int argc, char** argv)
 {
@@ -30,9 +31,11 @@ int main(int argc, char** argv)
         SSL_CTX *ctx = SSL_CTX_new(method);
         if( !ctx )
             server_error( "Init ssl ctx error" );
-        if (SSL_CTX_use_certificate_file(ctx, "./keys/cnlab.cert", SSL_FILETYPE_PEM) <= 0)   // 加载数字证书
+        // if( !SSL_CTX_load_verify_dir(ctx, "../.acme.sh/jackguan.top/") )
+        //     server_error("load cert error!");
+        if (SSL_CTX_use_certificate_chain_file(ctx, "./keys/fullchain.cer") <= 0)   // 加载数字证书
             server_error("Load cert file error");
-        if (SSL_CTX_use_PrivateKey_file(ctx, "./keys/cnlab.prikey", SSL_FILETYPE_PEM) <= 0)     // 加载私钥
+        if (SSL_CTX_use_PrivateKey_file(ctx, "./keys/jackguan.top.key", SSL_FILETYPE_PEM) <= 0)     // 加载私钥
             server_error( "Load prikey file error");
         if( !SSL_CTX_check_private_key( ctx ) )             // 查看私钥和证书是否匹配
             server_error( "Private key does not match the certificate public key\n" );
