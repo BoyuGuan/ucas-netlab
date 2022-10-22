@@ -5,10 +5,9 @@ void *handle_80_thread(void* vargp);
 void *handle_443_thread(void* vargp);
 void redirectTo443Use301(int fd, char* newRequestTarget);
 void parseURL(char* url, char* fileName);
-void server_response(SSL* ssl , char *fileName, int serviceCode, char* shortMessage, char* range, int fd);
-void serve_no_range(SSL* ssl, char *fileName, int serviceCode, char* shortErrorMessage, int fd);
-void serve_range(SSL* ssl, char*fileName,  char* range, int fd);
-void serve_video(int fd, char *fileName, int serviceCode, char *serviceShortMesssage, char* range);
+int server_response(SSL* ssl , char *fileName, int serviceCode, char* shortMessage, char* range);
+int serve_no_range(SSL* ssl, char *fileName, int serviceCode, char* shortErrorMessage);
+int serve_range(SSL* ssl, char*fileName,  char* range);
 void get_filetype(char *filename, char *filetype);
 void closeConnection(SSL* ssl, int connectFD, int shutDownSSL);
 
@@ -20,7 +19,6 @@ void closeConnection(SSL* ssl, int connectFD, int shutDownSSL);
     TODO    添加更多的安全防控与反扒措施
     TODO    
 */
-
 
 int main(int argc, char** argv)
 {
@@ -40,8 +38,6 @@ int main(int argc, char** argv)
         SSL_CTX *ctx = SSL_CTX_new(method);
         if( !ctx )
             server_error( "Init ssl ctx error" );
-        // if( !SSL_CTX_load_verify_dir(ctx, "../.acme.sh/jackguan.top/") )
-        //     server_error("load cert error!");
         if (SSL_CTX_use_certificate_chain_file(ctx, "./keys/fullchain.cer") <= 0)   // 加载数字证书
             server_error("Load cert file error");
         if (SSL_CTX_use_PrivateKey_file(ctx, "./keys/jackguan.top.key", SSL_FILETYPE_PEM) <= 0)     // 加载私钥
@@ -115,6 +111,7 @@ void *handle_80_thread(void* vargp){
     free(vargp);
     char buf[BUFFER_SIZE], method[SHORT_STRING_BUF], httpVersion[SHORT_STRING_BUF], \
         url[ONE_K_SIZE], newRequestTarget[ONE_K_SIZE]="https://" ; 
+    
     /*
     因为我们在新加坡的的主机不需要备案，所以可以直接访问80与443端口，但为了安全起见我套了一层cloud falre，所以206经常出不来
     想出现206的话可以走内网直接访问80与443端口，不走cloudflare，我们通过zerotier或者wireguard两种方式组内网
@@ -128,17 +125,16 @@ void *handle_80_thread(void* vargp){
         return;
     // 做新请求链接
     sscanf(buf, "%s %s %s", method, url, httpVersion );
-    strcat(newRequestTarget, "jackguan.top");
     char clientIPFirst7[8], wireguardSubNet[8] = "10.0.0.", zerotierSubNet[8] = "192.168";
     strncpy(clientIPFirst7, clientHostName, 7);
     clientIPFirst7[7] = '\0'; 
-
     if(!strcmp(clientIPFirst7, wireguardSubNet))   // wireguard子网
         strcat(newRequestTarget, "10.0.0.7");
     else if (!strcmp(clientIPFirst7, zerotierSubNet))   // zerotier子网
         strcat(newRequestTarget, "192.168.196.7");
     else    // 公网
-        strcat(newRequestTarget, url);
+        strcat(newRequestTarget, "jackguan.top");
+    strcat( newRequestTarget, url);
     redirectTo443Use301(connectFD, newRequestTarget);
 
     if(close(connectFD) < 0)
@@ -177,26 +173,23 @@ void *handle_443_thread(void* vargp){
     rio_ssl_readinitb(&clientRio, ssl);
     if( !rio_ssl_readlineb(&clientRio, buf, BUFFER_SIZE))   // 空请求
         closeConnection(ssl, connectFD, WRITE_ERROR_SHUT_DOWN_SSL);
-
     printf("request content is \n%s", buf);
     sscanf(buf, "%s %s %s", method, url, httpVersion );
-    if (strcasecmp(method, "GET") || strstr(fileName, "../") ){    // 只支持GET 方法， 且防止其跳出本目录，访问服务器其他项目资源
-        server_response(ssl, "./dir/501.html", 501, "Not Implemented", NULL, connectFD);
+    if (strcasecmp(method, "GET")) {    // 只支持GET 方法
+        closeConnection(ssl, connectFD, server_response(ssl, "./dir/501.html", 501, "Not Implemented", NULL));
         return;
     }
     read_request_headers(&clientRio, requestRange);  //读取所有请求内容，并查看是否有Range段，有的话为分段请求
     parseURL(url, fileName) ; //  解析出文件地址
 
     struct stat sbuf;   // 该文件状态
-    if( stat(fileName, &sbuf) < 0){  // 没这文件
-        server_response(ssl, "./dir/404.html",  404, "Not Found", NULL, connectFD);
+    if(stat(fileName, &sbuf) < 0){  // 没这文件
+        closeConnection(ssl, connectFD, server_response(ssl, "./dir/404.html",  404, "Not Found", NULL));
         return;
     }
-
-
     if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) { // 没有权限读的文件
         stat("./dir/403.html", &sbuf);
-        server_response(ssl, "./dir/403.html",  403, "Forbidden", NULL, connectFD);
+        closeConnection(ssl, connectFD, server_response(ssl, "./dir/403.html",  403, "Forbidden", NULL));
         return;
     }
 
@@ -207,22 +200,21 @@ void *handle_443_thread(void* vargp){
         successServerCode = 206;
         strcpy(successServerShortMessage, "Partial Content");
     }
-    server_response(ssl, fileName,  successServerCode, successServerShortMessage, requestRange, connectFD);
+    closeConnection(ssl, connectFD, server_response(ssl, fileName,  successServerCode, successServerShortMessage, requestRange));
 }
 
-void server_response(SSL* ssl , char *fileName, int serviceCode, char* shortMessage, char* range, int fd){
+int server_response(SSL* ssl , char *fileName, int serviceCode, char* shortMessage, char* range){
     if(serviceCode != 206)
-        serve_no_range(ssl, fileName, serviceCode, shortMessage, fd);
+       return serve_no_range(ssl, fileName, serviceCode, shortMessage);
     else
-        serve_range(ssl, fileName, range, fd);
+       return serve_range(ssl, fileName, range);
 }
 
-void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessage, int fd){
+int serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessage){
 
     struct stat sbuf;
     stat(fileName, &sbuf);
-    int srcfd, writeStatus, fileSize = sbuf.st_size;
-    
+    int srcfd, writeStatus = WRITE_OK ,fileSize = sbuf.st_size;
     char *srcp, fileType[MIDDLE_STRING_BUF], buf[FOUR_K_SIZE];
     // printf("serverCode: %d   shortMessage: %s  file name: %s  file size : %d \n", serviceCode, shortMessage, fileName ,fileSize);
     // 发headers给client
@@ -237,10 +229,8 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
     printf("response header is:\n%s", buf);
 
     writeStatus = rio_ssl_writen(ssl, buf, strlen(buf));
-    if( writeStatus != WRITE_OK ){
-        closeConnection(ssl, fd, writeStatus);
-        return ;
-    }
+    if( writeStatus != WRITE_OK )
+        return writeStatus;
 
     //  发所请求的文件内容给client
     if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
@@ -251,20 +241,18 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
     if(close(srcfd) < 0 )
         server_error("close object file error!");
     writeStatus = rio_ssl_writen(ssl, srcp, fileSize);
-    if( writeStatus != WRITE_OK ){
-        closeConnection(ssl, fd, writeStatus);
-    }
     if( munmap(srcp, fileSize) < 0 )
         server_error("unmmap object file error!");
+    return writeStatus;
 }
 
 
-void serve_range(SSL* ssl, char*fileName,  char* range, int fd){
+int serve_range(SSL* ssl, char*fileName,  char* range){
     // printf("\n\n%  %s  %s \n" , fileName, range);
     struct stat sbuf;
     stat(fileName, &sbuf);
     int srcfd;
-    size_t contentLength, fileSize = sbuf.st_size;
+    size_t contentLength, fileSize = sbuf.st_size, writeStatus = WRITE_OK;
     char *srcp, fileType[MIDDLE_STRING_BUF], buf[FOUR_K_SIZE];
 
     size_t begin = SIZE_T_MAX, end = SIZE_T_MAX;
@@ -273,7 +261,7 @@ void serve_range(SSL* ssl, char*fileName,  char* range, int fd){
     if (begin == SIZE_T_MAX)  // 没给begin，默认是0
         begin = 0;
     if (begin >= fileSize)// 给大了，超过视频大小了
-        return; // 啥也不干
+        return writeStatus; // 啥也不干
     
     if(end == SIZE_T_MAX)  // 没给end，也就是读到头
         end = fileSize-1;
@@ -290,12 +278,9 @@ void serve_range(SSL* ssl, char*fileName,  char* range, int fd){
     sprintf(buf, "%sContent-length: %d\r\n\r\n", buf, contentLength);
     printf("%s", buf);
     
-    int writeStatus = rio_ssl_writen(ssl, buf, strlen(buf));
-    if( writeStatus != WRITE_OK ){
-        closeConnection(ssl, fd, writeStatus);
-        return;
-    }
-    
+    writeStatus = rio_ssl_writen(ssl, buf, strlen(buf));
+    if( writeStatus != WRITE_OK )
+        return writeStatus;
     // 发headers
     if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
         server_error("open object file error!");
@@ -309,22 +294,17 @@ void serve_range(SSL* ssl, char*fileName,  char* range, int fd){
     // printf("loops is:%lu   remain:%d\n", loops, remain);
 
     for (size_t i = 0; i < loops ; i++){
-        writeStatus =  rio_ssl_writen(ssl, srcp + MINI_CHUNK_SIZE * loops + begin, remain);
-        if( writeStatus != WRITE_OK ){
+        writeStatus = rio_ssl_writen(ssl, srcp + i * MINI_CHUNK_SIZE + begin, MINI_CHUNK_SIZE);
+        if( writeStatus !=  WRITE_OK ){
             dataStatusCode = 1;
-            closeConnection(ssl, fd, writeStatus);
             break;
         }
     }
-
-    if(dataStatusCode == 0){
-        writeStatus =  rio_ssl_writen(ssl, srcp + MINI_CHUNK_SIZE * loops + begin, remain);
-        if( writeStatus != WRITE_OK )
-            closeConnection(ssl, fd, writeStatus);
-    }
-
+    if(dataStatusCode == 0)
+        writeStatus = rio_ssl_writen(ssl, srcp + MINI_CHUNK_SIZE * loops + begin, remain);
     if( munmap(srcp, fileSize) < 0 )
         server_error("unmmap object file error!");
+    return writeStatus;
 }
 
 
@@ -354,17 +334,6 @@ void parseURL(char* url, char* fileName){
 
 }
 
-// 关闭连接
-void closeConnection(SSL* ssl, int connectFD, int shutDownSSL){
-    if (shutDownSSL != WRITE_ERROR_NOT_SHUT_DOWN_SSL){
-        SSL_shutdown(ssl);
-    }
-    SSL_free(ssl);
-    if(close(connectFD) < 0)
-        server_error("close conncet fd error!");  
-}
-
-
  // 阅读请求头部，并判断是否请求中包含range
 void read_request_headers(rio_ssl_t *rp, char* partialRange) 
 { 
@@ -388,8 +357,18 @@ void read_request_headers(rio_ssl_t *rp, char* partialRange)
  // 301重定向到443
 void redirectTo443Use301(int fd, char* newRequestTarget){
     char buf[FOUR_K_SIZE]; 
-    sprintf(buf, "HTTP/1.1 301 Moved Permanently\r\n"); 
+    sprintf(buf, "HTTP/1.1 301 Moved Permanently\r\n");    
     sprintf(buf, "%sLocation: %s\r\n\r\n", buf, newRequestTarget);
     printf("rediect header is:\n%s", buf);
     rio_writen(fd, buf, strlen(buf));
+}
+
+// 关闭连接
+void closeConnection(SSL* ssl, int connectFD, int shutDownSSL){
+    if (shutDownSSL != WRITE_ERROR_NOT_SHUT_DOWN_SSL){
+        SSL_shutdown(ssl);
+    }
+    SSL_free(ssl);
+    if(close(connectFD) < 0)
+        server_error("close conncet fd error!");  
 }

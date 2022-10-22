@@ -51,8 +51,8 @@
 #define RIO_BUFSIZE 8192
 #define MINI_CHUNK_SIZE 1280
 #define WRITE_OK 1
-#define WRITE_ERROR_NOT_SHUT_DOWN_SSL  -2 
-#define WRITE_ERROR_SHUT_DOWN_SSL -1
+#define WRITE_ERROR_NOT_SHUT_DOWN_SSL  7
+#define WRITE_ERROR_SHUT_DOWN_SSL 8
 
 typedef struct {
     int rio_fd;                /* Descriptor for this internal buf */
