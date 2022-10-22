@@ -50,6 +50,8 @@
 #define LISTEN_QUERY_MAX_LEN 512
 #define RIO_BUFSIZE 8192
 #define MINI_CHUNK_SIZE 1280
+#define NOT_SHUT_DOWN_SSL 44
+#define SHUT_DOWN_SSL 1
 
 typedef struct {
     int rio_fd;                /* Descriptor for this internal buf */
