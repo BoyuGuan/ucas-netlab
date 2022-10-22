@@ -5,7 +5,7 @@ void sigpipe_handler(int unused){
 }
 
 void server_error(char *errorMsessage){
-    fprintf(stderr, "%s: (%d) %s",errorMsessage, errno ,strerror(errno) );
+    fprintf(stderr, "(%d) %s: %s", errorMsessage, errno ,strerror(errno) );
     exit(1);
 }
 void rio_readinitb(rio_t *rp, int fd) 
@@ -89,8 +89,11 @@ int rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen)
                 return 0; /* EOF, no data read */
             else
                 break;    /* EOF, some data was read */
-        } else
+        } else{
+            if(errno == ECONNRESET)
+                return READ_ERROR;
             server_error("rio_readlineb Error!");	  /* Error */
+        }
     }
 
     *bufp = 0;
@@ -167,8 +170,11 @@ int rio_ssl_readlineb(rio_ssl_t *rp, void *usrbuf, size_t maxlen)
                 return 0; /* EOF, no data read */
             else
                 break;    /* EOF, some data was read */
-        } else
+        } else{
+            if(errno == ECONNRESET) // connect reset by peer
+                return READ_ERROR;
             server_error("rio_ssl_readlineb Error!");	  /* Error */
+        }
     }
 
     *bufp = 0;

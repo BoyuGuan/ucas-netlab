@@ -53,6 +53,8 @@
 #define WRITE_OK 1
 #define WRITE_ERROR_NOT_SHUT_DOWN_SSL  7
 #define WRITE_ERROR_SHUT_DOWN_SSL 8
+#define READ_ERROR -1
+
 
 typedef struct {
     int rio_fd;                /* Descriptor for this internal buf */

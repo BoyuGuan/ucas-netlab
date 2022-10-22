@@ -17,7 +17,6 @@ void closeConnection(SSL* ssl, int connectFD, int shutDownSSL);
     TODO    支持keep-alive方式连接，减少连接开销
     TODO    支持304 Not Modified，防止重复传输重复的页面
     TODO    添加更多的安全防控与反扒措施
-    TODO    
 */
 
 int main(int argc, char** argv)
@@ -56,12 +55,15 @@ int main(int argc, char** argv)
             struct thread_443_request* request443P = malloc(sizeof(struct thread_443_request)) ;
             request443P->ctx = ctx;
             if((request443P->connectFD = accept(listen443FD, &clientAddress, &clientLen ) ) < 0 ) // 新请求的fd
-                server_error("443 port accept error!");
+                continue;
+                // server_error("443 port accept error!");
             if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )   // 得到对方的主机名（ip）与对方的端口
-                server_error("443 port getnameinfo error");
+                continue;
+                // server_error("443 port getnameinfo error");
             printf("**NEW REQUEST**: 443 Accept connection from (%s,%s)\n", clientHostName, clientPort);
             if (pthread_create(&newThreadID, NULL, handle_443_thread, (void*)request443P) != 0)     // 创建新线程来处理该请求，这样就可以实现并发服务器
-                server_error("Thread create error!");
+                continue;
+                // server_error("Thread create error!");
         }
         
     }
@@ -78,13 +80,16 @@ int main(int argc, char** argv)
                 // 注意此处一定要用指针指向一个malloc出来的值，否则用实例传地址的话会导致主线程下一步for循环覆盖掉这个实例产生race
                 struct thread_80_request * request80P = malloc(sizeof(struct thread_80_request));
                 if((request80P->connectFD = accept(listen80FD,  &clientAddress, &clientLen ) ) < 0 )    // 同80
-                    server_error("80 port accept error!");
+                    continue;
+                    // server_error("80 port accept error!");
                 if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )    // 同80
-                    server_error("80 port getnameinfo error");
+                    continue;
+                    // server_error("80 port getnameinfo error");
                 printf("**NEW REQUEST**: 80 Accept connection from (%s,%s)\n", clientHostName, clientPort); // 同80
                 strcpy(request80P->clientHostName, clientHostName);
                 if (pthread_create(&newThreadID, NULL, handle_80_thread, (void *)request80P) != 0)  // 同80
-                    server_error("Thread create error!");
+                    continue;
+                    // server_error("Thread create error!");
                 // printf("\ntest2\n");
             }
         }
@@ -121,8 +126,9 @@ void *handle_80_thread(void* vargp){
     // 读取请求
     rio_t clientRio;
     rio_readinitb(&clientRio, connectFD);
-    if (!rio_readlineb(&clientRio, buf, BUFFER_SIZE))          // 空请求
-        return;
+    int readStatus = rio_readlineb(&clientRio, buf, BUFFER_SIZE);
+    if (!readStatus || readStatus == READ_ERROR)   // 空请求或者读取错误
+        return; //直接不管
     // 做新请求链接
     sscanf(buf, "%s %s %s", method, url, httpVersion );
     char clientIPFirst7[8], wireguardSubNet[8] = "10.0.0.", zerotierSubNet[8] = "192.168";
@@ -234,7 +240,8 @@ int serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessag
 
     //  发所请求的文件内容给client
     if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
-        server_error("open object file error!");
+        return writeStatus;
+        // server_error("open object file error!");
 
     if ( (srcp = mmap(0, fileSize, PROT_READ, MAP_PRIVATE, srcfd, 0)) == ((void *) -1) ) // 内存映射，加快速度
         server_error("mmap object file function error!");
@@ -282,8 +289,10 @@ int serve_range(SSL* ssl, char*fileName,  char* range){
     if( writeStatus != WRITE_OK )
         return writeStatus;
     // 发headers
-    if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 )
-        server_error("open object file error!");
+    if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 ) // 打开文件失败
+        return writeStatus;
+        // server_error("open object file error!");
+    
     if ( (srcp = mmap(0, fileSize, PROT_READ, MAP_PRIVATE, srcfd, 0)) == ((void *) -1) )
         server_error("mmap object file function error!");
     if(close(srcfd) < 0 )
