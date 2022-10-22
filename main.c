@@ -12,7 +12,14 @@ void serve_video(int fd, char *fileName, int serviceCode, char *serviceShortMess
 void get_filetype(char *filename, char *filetype);
 void closeConnection(SSL* ssl, int connectFD, int shutDownSSL);
 
-// TODO 本项目已经整体上完全完成了老师的所有既定要求，可以进一步提升的点： 支持keep-alive方式连接
+/*
+    本项目已经整体上完全完成了老师的所有既定要求，可以进一步提升的几个点如下：
+    TODO    底层使用BIO
+    TODO    支持keep-alive方式连接，减少连接开销
+    TODO    支持304 Not Modified，防止重复传输重复的页面
+    TODO    添加更多的安全防控与反扒措施
+    TODO    
+*/
 
 
 int main(int argc, char** argv)
@@ -108,11 +115,11 @@ void *handle_80_thread(void* vargp){
     free(vargp);
     char buf[BUFFER_SIZE], method[SHORT_STRING_BUF], httpVersion[SHORT_STRING_BUF], \
         url[ONE_K_SIZE], newRequestTarget[ONE_K_SIZE]="https://" ; 
-    
-    // 因为我们没有备案，所以走不了公网的80端口，只能通过zerotier或者wireguard组内网
-    // zerotier我用的是 192.168.196.0/24子网，wireguard我用的是10.0.0.0/24子网
-    // 两者通过ip第二位可以区分开，zerotier内网过来的包，走服务器在zerotier上的ip 192.168.196.7，
-    // 否则就是wireguard内网过来的包，走服务器在wireguard上的ip 10.0.0.7，
+    /*
+    因为我们在新加坡的的主机不需要备案，所以可以直接访问80与443端口，但为了安全起见我套了一层cloud falre，所以206经常出不来
+    想出现206的话可以走内网直接访问80与443端口，不走cloudflare，我们通过zerotier或者wireguard两种方式组内网
+    zerotier我用的是 192.168.196.0/24子网，wireguard我用的是10.0.0.0/24子网
+    */
 
     // 读取请求
     rio_t clientRio;
@@ -122,11 +129,16 @@ void *handle_80_thread(void* vargp){
     // 做新请求链接
     sscanf(buf, "%s %s %s", method, url, httpVersion );
     strcat(newRequestTarget, "jackguan.top");
-    // if(clientHostName[1] == '0')
-    //     strcat(newRequestTarget, "10.0.0.7");
-    // else
-    //     strcat(newRequestTarget, "192.168.196.7");
-    strcat( newRequestTarget, url);
+    char clientIPFirst7[8], wireguardSubNet[8] = "10.0.0.", zerotierSubNet[8] = "192.168";
+    strncpy(clientIPFirst7, clientHostName, 7);
+    clientIPFirst7[7] = '\0'; 
+
+    if(!strcmp(clientIPFirst7, wireguardSubNet))   // wireguard子网
+        strcat(newRequestTarget, "10.0.0.7");
+    else if (!strcmp(clientIPFirst7, zerotierSubNet))   // zerotier子网
+        strcat(newRequestTarget, "192.168.196.7");
+    else    // 公网
+        strcat(newRequestTarget, url);
     redirectTo443Use301(connectFD, newRequestTarget);
 
     if(close(connectFD) < 0)
@@ -151,7 +163,7 @@ void *handle_443_thread(void* vargp){
     if( SSLAcceptCode <= 0 ){
         // printf("The TLS/SSL handshake was not successful, but not a .\n");
         // server_error("ssl accept error!");
-        closeConnection(ssl, connectFD, SHUT_DOWN_SSL);
+        closeConnection(ssl, connectFD, WRITE_ERROR_SHUT_DOWN_SSL);
         return;
     }
 
@@ -164,7 +176,7 @@ void *handle_443_thread(void* vargp){
     // 读取请求
     rio_ssl_readinitb(&clientRio, ssl);
     if( !rio_ssl_readlineb(&clientRio, buf, BUFFER_SIZE))   // 空请求
-        closeConnection(ssl, connectFD, SHUT_DOWN_SSL);
+        closeConnection(ssl, connectFD, WRITE_ERROR_SHUT_DOWN_SSL);
 
     printf("request content is \n%s", buf);
     sscanf(buf, "%s %s %s", method, url, httpVersion );
@@ -225,11 +237,8 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
     printf("response header is:\n%s", buf);
 
     writeStatus = rio_ssl_writen(ssl, buf, strlen(buf));
-    if( writeStatus != 1 ){
-        if(writeStatus == -2)
-            closeConnection(ssl, fd, NOT_SHUT_DOWN_SSL);
-        else
-            closeConnection(ssl, fd, SHUT_DOWN_SSL);
+    if( writeStatus != WRITE_OK ){
+        closeConnection(ssl, fd, writeStatus);
         return ;
     }
 
@@ -242,11 +251,8 @@ void serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessa
     if(close(srcfd) < 0 )
         server_error("close object file error!");
     writeStatus = rio_ssl_writen(ssl, srcp, fileSize);
-    if( writeStatus != 1 ){
-        if(writeStatus == -2)
-            closeConnection(ssl, fd, NOT_SHUT_DOWN_SSL);
-        else
-            closeConnection(ssl, fd, SHUT_DOWN_SSL);
+    if( writeStatus != WRITE_OK ){
+        closeConnection(ssl, fd, writeStatus);
     }
     if( munmap(srcp, fileSize) < 0 )
         server_error("unmmap object file error!");
@@ -285,11 +291,8 @@ void serve_range(SSL* ssl, char*fileName,  char* range, int fd){
     printf("%s", buf);
     
     int writeStatus = rio_ssl_writen(ssl, buf, strlen(buf));
-    if( writeStatus != 1 ){
-        if(writeStatus == -2)
-            closeConnection(ssl, fd, NOT_SHUT_DOWN_SSL);
-        else
-            closeConnection(ssl, fd, SHUT_DOWN_SSL);
+    if( writeStatus != WRITE_OK ){
+        closeConnection(ssl, fd, writeStatus);
         return;
     }
     
@@ -307,25 +310,17 @@ void serve_range(SSL* ssl, char*fileName,  char* range, int fd){
 
     for (size_t i = 0; i < loops ; i++){
         writeStatus =  rio_ssl_writen(ssl, srcp + MINI_CHUNK_SIZE * loops + begin, remain);
-        if( writeStatus != 1 ){
+        if( writeStatus != WRITE_OK ){
             dataStatusCode = 1;
-            if(writeStatus == -2)
-                closeConnection(ssl, fd, NOT_SHUT_DOWN_SSL);
-            else
-                closeConnection(ssl, fd, SHUT_DOWN_SSL);
+            closeConnection(ssl, fd, writeStatus);
             break;
         }
     }
 
     if(dataStatusCode == 0){
         writeStatus =  rio_ssl_writen(ssl, srcp + MINI_CHUNK_SIZE * loops + begin, remain);
-        if( writeStatus != 1 ){
-            if(writeStatus == -2)
-                closeConnection(ssl, fd, NOT_SHUT_DOWN_SSL);
-            else
-                closeConnection(ssl, fd, SHUT_DOWN_SSL);
-            return;
-        }
+        if( writeStatus != WRITE_OK )
+            closeConnection(ssl, fd, writeStatus);
     }
 
     if( munmap(srcp, fileSize) < 0 )
@@ -361,7 +356,7 @@ void parseURL(char* url, char* fileName){
 
 // 关闭连接
 void closeConnection(SSL* ssl, int connectFD, int shutDownSSL){
-    if (shutDownSSL != NOT_SHUT_DOWN_SSL){
+    if (shutDownSSL != WRITE_ERROR_NOT_SHUT_DOWN_SSL){
         SSL_shutdown(ssl);
     }
     SSL_free(ssl);
@@ -393,7 +388,7 @@ void read_request_headers(rio_ssl_t *rp, char* partialRange)
  // 301重定向到443
 void redirectTo443Use301(int fd, char* newRequestTarget){
     char buf[FOUR_K_SIZE]; 
-    sprintf(buf, "HTTP/1.1 301 Moved Permanently\r\n");    
+    sprintf(buf, "HTTP/1.1 301 Moved Permanently\r\n"); 
     sprintf(buf, "%sLocation: %s\r\n\r\n", buf, newRequestTarget);
     printf("rediect header is:\n%s", buf);
     rio_writen(fd, buf, strlen(buf));

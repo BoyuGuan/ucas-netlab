@@ -189,13 +189,13 @@ int rio_ssl_writen(SSL* ssl, void *usrbuf, size_t n) {
             if (errno == EINTR)  /* Interrupted by system call */
                 nwritten = 0;    /* and call write() again */
             else if ( (errno == EPIPE) || errno == ECONNRESET ) // 在写一个对方已经关闭了的TCP通道fd
-                return -1;
+                return WRITE_ERROR_SHUT_DOWN_SSL;
             else{
                 // int a = SSL_ERROR_ZERO_RETURN;
                 printf("ssl write return value is %d", nwritten);
                 printf("ssl error number is: %d\n", SSL_get_error(ssl, nwritten));
                 // server_error("rio_ssl_writen Error Please Check !");       /* errno set by write() */
-                return -2;
+                return WRITE_ERROR_NOT_SHUT_DOWN_SSL;
             }
         }
         nleft -= nwritten;

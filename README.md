@@ -32,3 +32,6 @@ sprintf("%d-%d", a, b);
 
 # 10.21
 `SSL_read`函数与`read`，`SSL_write`函数与`write`基本行为相似，可以用类似的逻辑实现robust ssl io
+
+# 10.22
+长期连接时，有时候`rio_ssl_writen()`会报`SSL_ERROR_SSL`，出现错误。此时按照官网的要求不能使用`SSL_shutdown()`函数，目前先简单忽略了此错误，待进一步查看。
