@@ -81,11 +81,7 @@ struct thread_443_request { // 443线程处理函数的参数结构
 	SSL_CTX *ctx;
 };
 
-
 void sigpipe_handler(int unused);
-
-// 测试函数
-// void testOK();
 
 // robust IO 健壮性的读写
 void rio_readinitb(rio_t *rp, int fd) ;
@@ -101,6 +97,7 @@ int rio_ssl_writen(SSL* ssl, void *usrbuf, size_t n);
 
 void server_error(char *errorMsessage);
 int open_listen_fd(char *port);
+void get_filetype(char *filename, char *filetype);
 
 
 
