@@ -101,6 +101,7 @@ int rio_ssl_writen(SSL* ssl, void *usrbuf, size_t n);
 
 void server_error(char *errorMsessage);
 int open_listen_fd(char *port);
+void closeConnection(SSL* ssl, int connectFD, int shutDownSSL);
 
 
 

@@ -9,7 +9,6 @@ int server_response(SSL* ssl , char *fileName, int serviceCode, char* shortMessa
 int serve_no_range(SSL* ssl, char *fileName, int serviceCode, char* shortErrorMessage);
 int serve_range(SSL* ssl, char*fileName,  char* range);
 void get_filetype(char *filename, char *filetype);
-void closeConnection(SSL* ssl, int connectFD, int shutDownSSL);
 
 /*
     本项目已经整体上完全完成了老师的所有既定要求，可以进一步提升的几个点如下：
@@ -267,11 +266,11 @@ int serve_range(SSL* ssl, char*fileName,  char* range){
 
     if (begin == SIZE_T_MAX)  // 没给begin，默认是0
         begin = 0;
-    if (begin >= fileSize)// 给大了，超过视频大小了
+    if (begin >= fileSize)  // 给大了，超过视频大小了
         return writeStatus; // 啥也不干
     
     if(end == SIZE_T_MAX)  // 没给end，也就是读到头
-        end = fileSize-1;
+        end = fileSize - 1;
 
     contentLength = end - begin + 1;
     
@@ -372,12 +371,3 @@ void redirectTo443Use301(int fd, char* newRequestTarget){
     rio_writen(fd, buf, strlen(buf));
 }
 
-// 关闭连接
-void closeConnection(SSL* ssl, int connectFD, int shutDownSSL){
-    if (shutDownSSL != WRITE_ERROR_NOT_SHUT_DOWN_SSL){
-        SSL_shutdown(ssl);
-    }
-    SSL_free(ssl);
-    if(close(connectFD) < 0)
-        server_error("close conncet fd error!");  
-}

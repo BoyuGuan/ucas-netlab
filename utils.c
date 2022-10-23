@@ -251,3 +251,13 @@ int open_listen_fd(char *port){
     }
     return listenFD;
  }
+
+ // 关闭连接
+void closeConnection(SSL* ssl, int connectFD, int shutDownSSL){
+    if (shutDownSSL != WRITE_ERROR_NOT_SHUT_DOWN_SSL){
+        SSL_shutdown(ssl);
+    }
+    SSL_free(ssl);
+    if(close(connectFD) < 0)
+        server_error("close conncet fd error!");  
+}
