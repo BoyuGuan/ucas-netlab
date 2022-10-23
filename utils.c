@@ -261,3 +261,19 @@ void closeConnection(SSL* ssl, int connectFD, int shutDownSSL){
     if(close(connectFD) < 0)
         server_error("close conncet fd error!");  
 }
+ // 解析请求的文件类型
+void get_filetype(char *filename, char *filetype) 
+{
+    if (strstr(filename, ".html"))
+        strcpy(filetype, "text/html");
+    else if (strstr(filename, ".gif"))
+        strcpy(filetype, "image/gif");
+    else if (strstr(filename, ".png"))
+        strcpy(filetype, "image/png");
+    else if (strstr(filename, ".jpg"))
+        strcpy(filetype, "image/jpeg");
+    else if (strstr(filename, ".mp4"))
+        strcpy(filetype, "video/mp4");
+    else
+        strcpy(filetype, "text/plain");
+}  

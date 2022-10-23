@@ -9,6 +9,7 @@ int server_response(SSL* ssl , char *fileName, int serviceCode, char* shortMessa
 int serve_no_range(SSL* ssl, char *fileName, int serviceCode, char* shortErrorMessage);
 int serve_range(SSL* ssl, char*fileName,  char* range);
 void get_filetype(char *filename, char *filetype);
+void closeConnection(SSL* ssl, int connectFD, int shutDownSSL);
 
 /*
     本项目已经整体上完全完成了老师的所有既定要求，可以进一步提升的几个点如下：
@@ -118,7 +119,7 @@ void *handle_80_thread(void* vargp){
     
     /*
     因为我们在新加坡的的主机不需要备案，所以可以直接访问80与443端口，但为了安全起见我套了一层cloud falre，所以206经常出不来
-    想出现206的话可以走内网直接访问80与443端口，不走cloudflare，我们通过zerotier或者wireguard两种方式组内网
+    想出现206的话可以走内网直接访问80与443端口，不走cloudflare。我们通过zerotier和wireguard两种方式组内网
     zerotier我用的是 192.168.196.0/24子网，wireguard我用的是10.0.0.0/24子网
     */
 
@@ -316,22 +317,7 @@ int serve_range(SSL* ssl, char*fileName,  char* range){
 }
 
 
-// 解析请求的文件类型
-void get_filetype(char *filename, char *filetype) 
-{
-    if (strstr(filename, ".html"))
-        strcpy(filetype, "text/html");
-    else if (strstr(filename, ".gif"))
-        strcpy(filetype, "image/gif");
-    else if (strstr(filename, ".png"))
-        strcpy(filetype, "image/png");
-    else if (strstr(filename, ".jpg"))
-        strcpy(filetype, "image/jpeg");
-    else if (strstr(filename, ".mp4"))
-        strcpy(filetype, "video/mp4");
-    else
-        strcpy(filetype, "text/plain");
-}  
+
 
 // 解析URL，搞出文件的相对路径
 void parseURL(char* url, char* fileName){
