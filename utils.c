@@ -1,13 +1,17 @@
 #include "utils.h"
 
-void sigpipe_handler(int unused){
-    printf("catch a pipe error connction reset by peer\n");
-}
-
 void server_error(char *errorMsessage){
     fprintf(stderr, "(%d) %s: %s", errorMsessage, errno ,strerror(errno) );
     exit(1);
 }
+
+void sigchild_handler(int unused){
+    printf("catch a pipe error connction reset by peer\n");
+}
+void sigpipe_handler(int unused){
+    server_error("child process 80/443 terminate!");
+}
+
 void rio_readinitb(rio_t *rp, int fd) 
 {
     rp->rio_fd = fd;  

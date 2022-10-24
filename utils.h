@@ -81,7 +81,8 @@ struct thread_443_request { // 443线程处理函数的参数结构
 	SSL_CTX *ctx;
 };
 
-void sigpipe_handler(int unused);
+void sigpipe_handler(int unused);   // pipe error 处理程序（直接忽略）
+void sigchild_handler(int unused);   // 子进程异常处理程序 （ 直接退出）
 
 // robust IO 健壮性的读写
 void rio_readinitb(rio_t *rp, int fd) ;

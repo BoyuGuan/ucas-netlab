@@ -22,9 +22,10 @@ void closeConnection(SSL* ssl, int connectFD, int shutDownSSL);
 
 int main(int argc, char** argv)
 {
-    signal(SIGPIPE, sigpipe_handler); // 忽略pipe错误，此错误会在对方关闭了TCP连接后己方仍要写时处罚
+    signal(SIGPIPE, sigpipe_handler);   // 忽略pipe错误，此错误会在对方关闭了TCP连接后己方仍要写时处罚
+    signal(SIGCHLD, sigchild_handler);  // 子进程（80或者443进程）出错就直接关闭程序
     char clientHostName[HOSTNAME_LEN], clientPort[PORT_LEN];
-    pid_t process443Pid, process80Pid;
+    pid_t   process443Pid, process80Pid;
 
     // 创建两个子进程，一个是进程处理443的https，一个进程处理80的http
     if ( (process443Pid = fork()) == 0  )   
@@ -61,11 +62,12 @@ int main(int argc, char** argv)
             if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )   // 得到对方的主机名（ip）与对方的端口
                 continue;
                 // server_error("443 port getnameinfo error");
-            printf("**NEW REQUEST**: 443 Accept connection from (%s,%s)\n", clientHostName, clientPort);
+            // printf("**NEW REQUEST**: 443 Accept connection from (%s,%s)\n", clientHostName, clientPort);
             if (pthread_create(&newThreadID, NULL, handle_443_thread, (void*)request443P) != 0)     // 创建新线程来处理该请求，这样就可以实现并发服务器
                 continue;
                 // server_error("Thread create error!");
         }
+        server_error("443 process error!");    // 出错退出
         
     }
     else{
@@ -93,14 +95,10 @@ int main(int argc, char** argv)
                     // server_error("Thread create error!");
                 // printf("\ntest2\n");
             }
+          server_error("80 process error!");    // 出错退出
         }
         else{
-            while (1)
-            {
-                // 服务器主进程，等俩子进程跑
-                ;
-            }
-            
+            pause();
         }
     }
     return 0;
