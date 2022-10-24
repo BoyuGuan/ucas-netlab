@@ -13,6 +13,7 @@ void closeConnection(SSL* ssl, int connectFD, int shutDownSSL);
 
 /*
     本项目已经整体上完全完成了老师的所有既定要求，可以进一步提升的几个点如下：
+    TODO    443端口长时间运行（24个小时）仍会因为某种情况退出
     TODO    底层使用BIO
     TODO    支持keep-alive方式连接，减少连接开销
     TODO    支持304 Not Modified，防止重复传输重复的页面
