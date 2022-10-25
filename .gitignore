@@ -4,4 +4,4 @@ http-server
 *.mp4
 *.log
 # fullchain.cer
-jackguan.top.key
+*jackguan.top.key

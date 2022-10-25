@@ -1,7 +1,7 @@
 #include "utils.h"
 
 void server_error(char *errorMsessage){
-    fprintf(stderr, "(%d) %s: %s", errorMsessage, errno ,strerror(errno) );
+    fprintf(stderr, "%s (%d): %s", errorMsessage, errno ,strerror(errno) );
     exit(1);
 }
 
@@ -202,6 +202,7 @@ int rio_ssl_writen(SSL* ssl, void *usrbuf, size_t n) {
             else{
                 // int a = SSL_ERROR_ZERO_RETURN;
                 printf("ssl write return value is %d\n", nwritten);
+                printf("errno is %d\n", errno);
                 printf("ssl error number is: %d\n", SSL_get_error(ssl, nwritten));
                 // server_error("rio_ssl_writen Error Please Check !");       /* errno set by write() */
                 return WRITE_ERROR_NOT_SHUT_DOWN_SSL;
@@ -259,10 +260,13 @@ int open_listen_fd(char *port){
 void closeConnection(SSL* ssl, int connectFD, int shutDownSSL){
     if (shutDownSSL != WRITE_ERROR_NOT_SHUT_DOWN_SSL){
         SSL_shutdown(ssl);
+        SSL_free(ssl);
+        if(close(connectFD) < 0)
+            server_error("close conncet fd error!");  
     }
-    SSL_free(ssl);
-    if(close(connectFD) < 0)
-        server_error("close conncet fd error!");  
+    else{
+        printf("catch a ssl write error, don't free or shutdown the ssl object\n");
+    }
 }
  // 解析请求的文件类型
 void get_filetype(char *filename, char *filetype) 

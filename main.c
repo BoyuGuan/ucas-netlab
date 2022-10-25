@@ -35,13 +35,15 @@ int main(int argc, char** argv)
         SSL_library_init();
         OpenSSL_add_all_algorithms();
         SSL_load_error_strings();
-        const SSL_METHOD *method = TLS_server_method();  // 支持TLS server版方法，包含TLSV1.2和TLSV1.3等
+        const SSL_METHOD *method = TLS_method();  // 支持TLS server版方法，包含TLSV1.2和TLSV1.3等
         // const SSL_METHOD *method = TLSv1_2_method();  // 支持TLS server版方法，包含TLSV1.2和TLSV1.3等
         SSL_CTX *ctx = SSL_CTX_new(method);
         if( !ctx )
             server_error( "Init ssl ctx error" );
-        if (SSL_CTX_use_certificate_chain_file(ctx, "./keys/fullchain.cer") <= 0)   // 加载数字证书
+        if (SSL_CTX_use_certificate_chain_file(ctx, "./keys/fullchain.cer") <= 0)   // 加载Let's encrypto数字证书
             server_error("Load cert file error");
+        // if (SSL_CTX_use_certificate_file(ctx, "./keys/jackguan.top.cer", SSL_FILETYPE_PEM) <= 0)   // 加载cloudflare 数字证书
+            // server_error( "Load cert error!");            
         if (SSL_CTX_use_PrivateKey_file(ctx, "./keys/jackguan.top.key", SSL_FILETYPE_PEM) <= 0)     // 加载私钥
             server_error( "Load prikey file error");
         if( !SSL_CTX_check_private_key( ctx ) )             // 查看私钥和证书是否匹配
