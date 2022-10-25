@@ -6,10 +6,10 @@ void server_error(char *errorMsessage){
 }
 
 void sigchild_handler(int unused){
-    printf("catch a pipe error connction reset by peer\n");
+    server_error("child process 80/443 terminate!");
 }
 void sigpipe_handler(int unused){
-    server_error("child process 80/443 terminate!");
+    printf("catch a pipe error connction reset by peer\n");
 }
 
 void rio_readinitb(rio_t *rp, int fd) 
@@ -192,7 +192,6 @@ int rio_ssl_writen(SSL* ssl, void *usrbuf, size_t n) {
     size_t nleft = n;
     int nwritten;
     char *bufp = usrbuf;
-
     while (nleft > 0) {
         // printf("\ndasd\n");
         if ((nwritten = SSL_write(ssl, bufp, nleft)) <= 0) {
@@ -202,7 +201,7 @@ int rio_ssl_writen(SSL* ssl, void *usrbuf, size_t n) {
                 return WRITE_ERROR_SHUT_DOWN_SSL;
             else{
                 // int a = SSL_ERROR_ZERO_RETURN;
-                printf("ssl write return value is %d", nwritten);
+                printf("ssl write return value is %d\n", nwritten);
                 printf("ssl error number is: %d\n", SSL_get_error(ssl, nwritten));
                 // server_error("rio_ssl_writen Error Please Check !");       /* errno set by write() */
                 return WRITE_ERROR_NOT_SHUT_DOWN_SSL;
@@ -211,7 +210,7 @@ int rio_ssl_writen(SSL* ssl, void *usrbuf, size_t n) {
         nleft -= nwritten;
         bufp += nwritten;
     }
-    return 1;
+    return WRITE_OK;
 }
 
 // 打开端口进行监听，集合了 socket()+bind()+listen()函数
@@ -269,7 +268,7 @@ void closeConnection(SSL* ssl, int connectFD, int shutDownSSL){
 void get_filetype(char *filename, char *filetype) 
 {
     if (strstr(filename, ".html"))
-        strcpy(filetype, "text/html");
+        strcpy(filetype, "text/html;charset=utf-8");
     else if (strstr(filename, ".ico"))
         strcpy(filetype, "image/vnd.microsoft.icon");
     else if (strstr(filename, ".mp4"))

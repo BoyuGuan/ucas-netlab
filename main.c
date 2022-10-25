@@ -36,6 +36,7 @@ int main(int argc, char** argv)
         OpenSSL_add_all_algorithms();
         SSL_load_error_strings();
         const SSL_METHOD *method = TLS_server_method();  // 支持TLS server版方法，包含TLSV1.2和TLSV1.3等
+        // const SSL_METHOD *method = TLSv1_2_method();  // 支持TLS server版方法，包含TLSV1.2和TLSV1.3等
         SSL_CTX *ctx = SSL_CTX_new(method);
         if( !ctx )
             server_error( "Init ssl ctx error" );
@@ -320,8 +321,13 @@ int serve_range(SSL* ssl, char*fileName,  char* range){
 
 // 解析URL，搞出文件的相对路径
 void parseURL(char* url, char* fileName){
-    strcpy(fileName, "./dir");
-    strcat(fileName, url);
+    if(!strstr(url, "dir")){
+        strcpy(fileName, "./dir");
+        strcat(fileName, url);
+    }else{
+        strcpy(fileName, ".");
+        strcat(fileName, url);
+    }
     if (url[strlen(url)-1] == '/')     
         strcat(fileName, "index.html");
 
