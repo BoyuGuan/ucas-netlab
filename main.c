@@ -1,6 +1,7 @@
 #include "utils.h"
 
-void read_request_headers(rio_ssl_t *rp, char* partialRange);
+void read_443_request_headers(rio_ssl_t *rp, char* partialRange);
+void read_80_request_headers(rio_t *rp, char* Host) ;
 void *handle_80_thread(void* vargp);
 void *handle_443_thread(void* vargp);
 void redirectTo443Use301(int fd, char* newRequestTarget);
@@ -44,7 +45,7 @@ int main(int argc, char** argv)
             server_error("Load cert file error");
         // if (SSL_CTX_use_certificate_file(ctx, "./keys/jackguan.top.cer", SSL_FILETYPE_PEM) <= 0)   // 加载cloudflare 数字证书
             // server_error( "Load cert error!");            
-        if (SSL_CTX_use_PrivateKey_file(ctx, "./keys/jackguan.top.key", SSL_FILETYPE_PEM) <= 0)     // 加载私钥
+        if (SSL_CTX_use_PrivateKey_file(ctx, "./keys/lets_jackguan.top.key", SSL_FILETYPE_PEM) <= 0)     // 加载私钥
             server_error( "Load prikey file error");
         if( !SSL_CTX_check_private_key( ctx ) )             // 查看私钥和证书是否匹配
             server_error( "Private key does not match the certificate public key\n" );
@@ -62,8 +63,9 @@ int main(int argc, char** argv)
             if((request443P->connectFD = accept(listen443FD, &clientAddress, &clientLen ) ) < 0 ) // 新请求的fd
                 continue;
                 // server_error("443 port accept error!");
-            if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )   // 得到对方的主机名（ip）与对方的端口
-                continue;
+            // getnameinfo 在mininet下有问题
+            // if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )   // 得到对方的主机名（ip）与对方的端口
+            //     continue;
                 // server_error("443 port getnameinfo error");
             // printf("**NEW REQUEST**: 443 Accept connection from (%s,%s)\n", clientHostName, clientPort);
             if (pthread_create(&newThreadID, NULL, handle_443_thread, (void*)request443P) != 0)     // 创建新线程来处理该请求，这样就可以实现并发服务器
@@ -88,11 +90,12 @@ int main(int argc, char** argv)
                 if((request80P->connectFD = accept(listen80FD,  &clientAddress, &clientLen ) ) < 0 )    // 同80
                     continue;
                     // server_error("80 port accept error!");
-                if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )    // 同80
-                    continue;
+                // getnameinfo 在mininet下有问题
+                // if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )    // 同80
+                    // continue;
                     // server_error("80 port getnameinfo error");
                 printf("**NEW REQUEST**: 80 Accept connection from (%s,%s)\n", clientHostName, clientPort); // 同80
-                strcpy(request80P->clientHostName, clientHostName);
+                // strcpy(request80P->clientHostName, clientHostName);
                 if (pthread_create(&newThreadID, NULL, handle_80_thread, (void *)request80P) != 0)  // 同80
                     continue;
                     // server_error("Thread create error!");
@@ -113,16 +116,18 @@ void *handle_80_thread(void* vargp){
     
     struct thread_80_request* request80P = (struct thread_80_request* ) vargp ;
     int connectFD = request80P->connectFD;
-    char clientHostName[HOSTNAME_LEN];
-    strcpy(clientHostName, request80P->clientHostName);
     free(vargp);
+    // char clientHostName[HOSTNAME_LEN];
+    // strcpy(clientHostName, request80P->clientHostName);
+
     char buf[BUFFER_SIZE], method[SHORT_STRING_BUF], httpVersion[SHORT_STRING_BUF], \
-        url[ONE_K_SIZE], newRequestTarget[ONE_K_SIZE]="https://" ; 
+        url[ONE_K_SIZE], newRequestTarget[ONE_K_SIZE]="https://", host[MIDDLE_STRING_BUF] = "unset" ; 
     
     /*
     因为我们在新加坡的的主机不需要备案，所以可以直接访问80与443端口，但为了安全起见我套了一层cloud falre，所以206经常出不来
-    想出现206的话可以走内网直接访问80与443端口，不走cloudflare。我们通过zerotier和wireguard两种方式组内网
-    zerotier我用的是 192.168.196.0/24子网，wireguard我用的是10.0.0.0/24子网
+    想出现206的话可以走内网直接访问80与443端口，不走cloudflare。我们还通过zerotier和wireguard两种方式组内网，所以要通过请求
+    中的host字段辨别是来自哪个子网的请求。公网的话会是jackguan.top，zerotier的话会是192.168.196.7，wireguard的话会是10.0.0.8，
+    mininet的话会是10.0.0.1
     */
 
     // 读取请求
@@ -133,18 +138,16 @@ void *handle_80_thread(void* vargp){
         return; //直接不管
     // 做新请求链接
     sscanf(buf, "%s %s %s", method, url, httpVersion );
-    char clientIPFirst7[8], wireguardSubNet[8] = "10.0.0.", zerotierSubNet[8] = "192.168";
-    strncpy(clientIPFirst7, clientHostName, 7);
-    clientIPFirst7[7] = '\0'; 
-    if(!strcmp(clientIPFirst7, wireguardSubNet))   // wireguard子网
-        strcat(newRequestTarget, "10.0.0.7");
-    else if (!strcmp(clientIPFirst7, zerotierSubNet))   // zerotier子网
-        strcat(newRequestTarget, "192.168.196.7");
-    else    // 公网
+    read_80_request_headers(&clientRio, host);
+    if(!strcmp(host, "unset")) // 没有找到host字段，默认去公网字段
         strcat(newRequestTarget, "jackguan.top");
+    else{
+        char newHost[MIDDLE_STRING_BUF];
+        sscanf(host, "Host: %s", newHost);
+        strcat(newRequestTarget, newHost);
+    }
     strcat( newRequestTarget, url);
     redirectTo443Use301(connectFD, newRequestTarget);
-
     if(close(connectFD) < 0)
         server_error("close conncet fd error!");
 }
@@ -187,7 +190,7 @@ void *handle_443_thread(void* vargp){
         closeConnection(ssl, connectFD, server_response(ssl, "./dir/501.html", 501, "Not Implemented", NULL));
         return;
     }
-    read_request_headers(&clientRio, requestRange);  //读取所有请求内容，并查看是否有Range段，有的话为分段请求
+    read_443_request_headers(&clientRio, requestRange);  //读取所有请求内容，并查看是否有Range段，有的话为分段请求
     parseURL(url, fileName) ; //  解析出文件地址
 
     struct stat sbuf;   // 该文件状态
@@ -336,7 +339,7 @@ void parseURL(char* url, char* fileName){
 }
 
  // 阅读请求头部，并判断是否请求中包含range
-void read_request_headers(rio_ssl_t *rp, char* partialRange) 
+void read_443_request_headers(rio_ssl_t *rp, char* partialRange) 
 { 
     char buf[ONE_K_SIZE];
 
@@ -351,6 +354,26 @@ void read_request_headers(rio_ssl_t *rp, char* partialRange)
         printf("%s", buf);
         if ( strstr(buf, "Range"))
             strcpy(partialRange, buf);        
+    }
+    return;
+}
+
+ // 阅读请求头部，并判断是否请求中包含range
+void read_80_request_headers(rio_t *rp, char* Host) 
+{ 
+    char buf[ONE_K_SIZE];
+
+    rio_readlineb(rp, buf, ONE_K_SIZE);
+    printf("%s", buf);
+    if ( strstr(buf, "Host: "))
+        strcpy(Host, buf);
+
+    while(strcmp(buf, "\r\n")) {          // http请求以一行 \r\n结束
+        // rio_readlineb(rp, buf, ONE_K_SIZE);
+        rio_readlineb(rp, buf, ONE_K_SIZE);
+        printf("%s", buf);
+        if ( strstr(buf, "Host: "))
+            strcpy(Host, buf);        
     }
     return;
 }
