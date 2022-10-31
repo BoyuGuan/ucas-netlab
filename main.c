@@ -41,11 +41,11 @@ int main(int argc, char** argv)
         SSL_CTX *ctx = SSL_CTX_new(method);
         if( !ctx )
             server_error( "Init ssl ctx error" );
-        if (SSL_CTX_use_certificate_chain_file(ctx, "./keys/fullchain.cer") <= 0)   // 加载Let's encrypto数字证书
+        if (SSL_CTX_use_certificate_chain_file(ctx, "/home/guan/ucas-netlab/keys/fullchain.cer") <= 0)   // 加载Let's encrypto数字证书
             server_error("Load cert file error");
         // if (SSL_CTX_use_certificate_file(ctx, "./keys/jackguan.top.cer", SSL_FILETYPE_PEM) <= 0)   // 加载cloudflare 数字证书
             // server_error( "Load cert error!");            
-        if (SSL_CTX_use_PrivateKey_file(ctx, "./keys/lets_jackguan.top.key", SSL_FILETYPE_PEM) <= 0)     // 加载私钥
+        if (SSL_CTX_use_PrivateKey_file(ctx, "/home/guan/ucas-netlab/keys/lets_jackguan.top.key", SSL_FILETYPE_PEM) <= 0)     // 加载私钥
             server_error( "Load prikey file error");
         if( !SSL_CTX_check_private_key( ctx ) )             // 查看私钥和证书是否匹配
             server_error( "Private key does not match the certificate public key\n" );
@@ -325,11 +325,11 @@ int serve_range(SSL* ssl, char*fileName,  char* range){
 
 // 解析URL，搞出文件的相对路径
 void parseURL(char* url, char* fileName){
-    if(!strstr(url, "dir")){
-        strcpy(fileName, "./dir");
+    if(!strstr(url, "dir")){        //  如果路径中没有dir，也就是直接在dir中取文件
+        strcpy(fileName, "/home/guan/ucas-netlab/dir");
         strcat(fileName, url);
-    }else{
-        strcpy(fileName, ".");
+    }else{  //  如果路径中有dir(测试)，则
+        strcpy(fileName, "/home/guan/ucas-netlab");
         strcat(fileName, url);
     }
     if (url[strlen(url)-1] == '/')     
