@@ -1,0 +1,13 @@
+[Unit]
+Description=simple http server by Jack Guan
+Documentation=https://github.com/BoyuGuan/ucas-netlab
+After=network.target
+Requires=network.target
+
+[Service]
+User=prometheus
+Restart=on-failure
+ExecStart=/usr/local/bin/http-server
+
+[Install]
+WantedBy=multi-user.target

@@ -175,9 +175,9 @@ int rio_ssl_readlineb(rio_ssl_t *rp, void *usrbuf, size_t maxlen)
             else
                 break;    /* EOF, some data was read */
         } else{
-            if(errno == ECONNRESET) // connect reset by peer
-                return READ_ERROR;
-            server_error("rio_ssl_readlineb Error!");	  /* Error */
+            // if(errno == ECONNRESET) // connect reset by peer
+            return READ_ERROR;
+            // server_error("rio_ssl_readlineb Error!");	  /* Error */
         }
     }
 
@@ -263,6 +263,7 @@ void closeConnection(SSL* ssl, int connectFD, int shutDownSSL){
         SSL_free(ssl);
         if(close(connectFD) < 0)
             server_error("close conncet fd error!");  
+        // printf("server");
     }
     else{
         printf("catch a ssl write error, don't free or shutdown the ssl object\n");
@@ -272,9 +273,9 @@ void closeConnection(SSL* ssl, int connectFD, int shutDownSSL){
 void get_filetype(char *filename, char *filetype) 
 {
     if (strstr(filename, ".html"))
-        strcpy(filetype, "text/html;charset=utf-8");
+        strcpy(filetype, "text/html;charset=utf-8");    // 得指定一波charset
     else if (strstr(filename, ".ico"))
-        strcpy(filetype, "image/vnd.microsoft.icon");
+        strcpy(filetype, "image/vnd.microsoft.icon");   //  网站logo
     else if (strstr(filename, ".mp4"))
         strcpy(filetype, "video/mp4");
     else if (strstr(filename, ".png"))

@@ -67,7 +67,7 @@ int main(int argc, char** argv)
             // if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )   // 得到对方的主机名（ip）与对方的端口
             //     continue;
                 // server_error("443 port getnameinfo error");
-            // printf("**NEW REQUEST**: 443 Accept connection from (%s,%s)\n", clientHostName, clientPort);
+            printf("**NEW REQUEST**: 443 Accept connection \n");
             if (pthread_create(&newThreadID, NULL, handle_443_thread, (void*)request443P) != 0)     // 创建新线程来处理该请求，这样就可以实现并发服务器
                 continue;
                 // server_error("Thread create error!");
@@ -94,7 +94,7 @@ int main(int argc, char** argv)
                 // if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )    // 同80
                     // continue;
                     // server_error("80 port getnameinfo error");
-                printf("**NEW REQUEST**: 80 Accept connection from (%s,%s)\n", clientHostName, clientPort); // 同80
+                printf("**NEW REQUEST**: 80 Accept connection \n"); // 同80
                 // strcpy(request80P->clientHostName, clientHostName);
                 if (pthread_create(&newThreadID, NULL, handle_80_thread, (void *)request80P) != 0)  // 同80
                     continue;
@@ -296,7 +296,6 @@ int serve_range(SSL* ssl, char*fileName,  char* range){
     // 发headers
     if ((srcfd = open(fileName, O_RDONLY, 0)) < 0 ) // 打开文件失败
         return writeStatus;
-        // server_error("open object file error!");
     
     if ( (srcp = mmap(0, fileSize, PROT_READ, MAP_PRIVATE, srcfd, 0)) == ((void *) -1) )
         server_error("mmap object file function error!");
