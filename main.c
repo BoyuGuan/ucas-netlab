@@ -187,7 +187,7 @@ void *handle_443_thread(void* vargp){
     // printf("request content is \n%s", buf);
     sscanf(buf, "%s %s %s", method, url, httpVersion );
     if (strcasecmp(method, "GET")) {    // 只支持GET 方法
-        closeConnection(ssl, connectFD, server_response(ssl, "./dir/501.html", 501, "Not Implemented", NULL));
+        closeConnection(ssl, connectFD, server_response(ssl, "/home/guan/ucas-netlab/dir/501.html", 501, "Not Implemented", NULL));
         return;
     }
     read_443_request_headers(&clientRio, requestRange);  //读取所有请求内容，并查看是否有Range段，有的话为分段请求
@@ -195,12 +195,12 @@ void *handle_443_thread(void* vargp){
 
     struct stat sbuf;   // 该文件状态
     if(stat(fileName, &sbuf) < 0){  // 没这文件
-        closeConnection(ssl, connectFD, server_response(ssl, "./dir/404.html",  404, "Not Found", NULL));
+        closeConnection(ssl, connectFD, server_response(ssl, "/home/guan/ucas-netlab/dir/404.html",  404, "Not Found", NULL));
         return;
     }
     if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) { // 没有权限读的文件
         stat("./dir/403.html", &sbuf);
-        closeConnection(ssl, connectFD, server_response(ssl, "./dir/403.html",  403, "Forbidden", NULL));
+        closeConnection(ssl, connectFD, server_response(ssl, "/home/guan/ucas-netlab/dir/403.html",  403, "Forbidden", NULL));
         return;
     }
 
