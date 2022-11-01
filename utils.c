@@ -9,7 +9,7 @@ void sigchild_handler(int unused){
     server_error("child process 80/443 terminate!");
 }
 void sigpipe_handler(int unused){
-    printf("catch a pipe error connction reset by peer\n");
+    // printf("catch a pipe error connction reset by peer\n");
 }
 
 void rio_readinitb(rio_t *rp, int fd) 
@@ -119,7 +119,7 @@ int rio_writen(int fd, void *usrbuf, size_t n)
             else if ( (errno == EPIPE) || errno == ECONNRESET ) // 在写一个对方已经关闭了的TCP通道fd
                 return -1;
             else{
-                printf("\n%d\n", errno);
+                // printf("\n%d\n", errno);
                 server_error("rio_writen Error Please Check !");       /* errno set by write() */
             }
         }
@@ -201,9 +201,9 @@ int rio_ssl_writen(SSL* ssl, void *usrbuf, size_t n) {
                 return WRITE_ERROR_SHUT_DOWN_SSL;
             else{
                 // int a = SSL_ERROR_ZERO_RETURN;
-                printf("ssl write return value is %d\n", nwritten);
-                printf("errno is %d\n", errno);
-                printf("ssl error number is: %d\n", SSL_get_error(ssl, nwritten));
+                // printf("ssl write return value is %d\n", nwritten);
+                // printf("errno is %d\n", errno);
+                // printf("ssl error number is: %d\n", SSL_get_error(ssl, nwritten));
                 // server_error("rio_ssl_writen Error Please Check !");       /* errno set by write() */
                 return WRITE_ERROR_NOT_SHUT_DOWN_SSL;
             }
@@ -265,9 +265,9 @@ void closeConnection(SSL* ssl, int connectFD, int shutDownSSL){
             server_error("close conncet fd error!");  
         // printf("server");
     }
-    else{
-        printf("catch a ssl write error, don't free or shutdown the ssl object\n");
-    }
+    // else{
+    //     printf("catch a ssl write error, don't free or shutdown the ssl object\n");
+    // }
 }
  // 解析请求的文件类型
 void get_filetype(char *filename, char *filetype) 

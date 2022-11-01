@@ -67,7 +67,7 @@ int main(int argc, char** argv)
             // if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )   // 得到对方的主机名（ip）与对方的端口
             //     continue;
                 // server_error("443 port getnameinfo error");
-            printf("**NEW REQUEST**: 443 Accept connection \n");
+            // printf("**NEW REQUEST**: 443 Accept connection \n");
             if (pthread_create(&newThreadID, NULL, handle_443_thread, (void*)request443P) != 0)     // 创建新线程来处理该请求，这样就可以实现并发服务器
                 continue;
                 // server_error("Thread create error!");
@@ -94,7 +94,7 @@ int main(int argc, char** argv)
                 // if( getnameinfo(&clientAddress, clientLen, clientHostName, HOSTNAME_LEN, clientPort, PORT_LEN, 0) != 0 )    // 同80
                     // continue;
                     // server_error("80 port getnameinfo error");
-                printf("**NEW REQUEST**: 80 Accept connection \n"); // 同80
+                // printf("**NEW REQUEST**: 80 Accept connection \n"); // 同80
                 // strcpy(request80P->clientHostName, clientHostName);
                 if (pthread_create(&newThreadID, NULL, handle_80_thread, (void *)request80P) != 0)  // 同80
                     continue;
@@ -184,7 +184,7 @@ void *handle_443_thread(void* vargp){
     rio_ssl_readinitb(&clientRio, ssl);
     if( !rio_ssl_readlineb(&clientRio, buf, BUFFER_SIZE))   // 空请求
         closeConnection(ssl, connectFD, WRITE_ERROR_SHUT_DOWN_SSL);
-    printf("request content is \n%s", buf);
+    // printf("request content is \n%s", buf);
     sscanf(buf, "%s %s %s", method, url, httpVersion );
     if (strcasecmp(method, "GET")) {    // 只支持GET 方法
         closeConnection(ssl, connectFD, server_response(ssl, "./dir/501.html", 501, "Not Implemented", NULL));
@@ -237,7 +237,7 @@ int serve_no_range(SSL* ssl,  char *fileName, int serviceCode, char* shortMessag
     sprintf(buf, "%sAccept-Ranges: bytes\r\n", buf);  // 支持分段请求
     sprintf(buf, "%sContent-length: %d\r\n", buf, fileSize);
     sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, fileType);
-    printf("response header is:\n%s", buf);
+    // printf("response header is:\n%s", buf);
 
     writeStatus = rio_ssl_writen(ssl, buf, strlen(buf));
     if( writeStatus != WRITE_OK )
@@ -288,7 +288,7 @@ int serve_range(SSL* ssl, char*fileName,  char* range){
     sprintf(buf, "%sContent-type: %s\r\n", buf, fileType);
     sprintf(buf, "%sContent-Range: bytes %lu-%lu/%lu\r\n", buf, begin, end, fileSize); // 注意是lu！！！
     sprintf(buf, "%sContent-length: %d\r\n\r\n", buf, contentLength);
-    printf("%s", buf);
+    // printf("%s", buf);
     
     writeStatus = rio_ssl_writen(ssl, buf, strlen(buf));
     if( writeStatus != WRITE_OK )
@@ -343,14 +343,14 @@ void read_443_request_headers(rio_ssl_t *rp, char* partialRange)
     char buf[ONE_K_SIZE];
 
     rio_ssl_readlineb(rp, buf, ONE_K_SIZE);
-    printf("%s", buf);
+    // printf("%s", buf);
     if ( strstr(buf, "Range"))
         strcpy(partialRange, buf);
 
     while(strcmp(buf, "\r\n")) {          // http请求以一行 \r\n结束
         // rio_readlineb(rp, buf, ONE_K_SIZE);
         rio_ssl_readlineb(rp, buf, ONE_K_SIZE);
-        printf("%s", buf);
+        // printf("%s", buf);
         if ( strstr(buf, "Range"))
             strcpy(partialRange, buf);        
     }
@@ -363,14 +363,14 @@ void read_80_request_headers(rio_t *rp, char* Host)
     char buf[ONE_K_SIZE];
 
     rio_readlineb(rp, buf, ONE_K_SIZE);
-    printf("%s", buf);
+    // printf("%s", buf);
     if ( strstr(buf, "Host: "))
         strcpy(Host, buf);
 
     while(strcmp(buf, "\r\n")) {          // http请求以一行 \r\n结束
         // rio_readlineb(rp, buf, ONE_K_SIZE);
         rio_readlineb(rp, buf, ONE_K_SIZE);
-        printf("%s", buf);
+        // printf("%s", buf);
         if ( strstr(buf, "Host: "))
             strcpy(Host, buf);        
     }
@@ -382,7 +382,7 @@ void redirectTo443Use301(int fd, char* newRequestTarget){
     char buf[FOUR_K_SIZE]; 
     sprintf(buf, "HTTP/1.1 301 Moved Permanently\r\n");    
     sprintf(buf, "%sLocation: %s\r\n\r\n", buf, newRequestTarget);
-    printf("rediect header is:\n%s", buf);
+    // printf("rediect header is:\n%s", buf);
     rio_writen(fd, buf, strlen(buf));
 }
 

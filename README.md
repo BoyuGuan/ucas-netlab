@@ -44,4 +44,7 @@ sprintf("%d-%d", a, b);
 <!-- 1. 有可能是简单的输出重定向到 1.log文件进行写文件造成了并发写入bug，导致程序退出。取消输出重定向到log文件后再次尝试。 -->
 
 # 10.25 
-1.  getnameinfo函数在mininet下有问题
+1. getnameinfo函数在mininet下有问题
+
+# 11.1
+1. 用systemd时别瞎输出不重要的东西，否则出错时在log里直接给你把磁盘写爆，在`/var/log/syslog`里。删除后reboot才好 :(
